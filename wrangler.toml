@@ -10,7 +10,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "kpkembar"
-database_id = "MASUKKAN_ID_DATABASE_D1_ANDA_DI_SINI"
+database_id = "ce0a7a7e-2405-4980-bc25-06cacc23f05a"
 
 # =======================================================
 # KONFIGURASI STORAGE CLOUDFLARE R2 (Untuk Gambar)
