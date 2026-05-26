@@ -1,47 +1,73 @@
 import { createRoute } from 'honox/factory'
 
 export default createRoute(async (c) => {
-  // Mengambil data raw langsung dari D1 seperti instruksi Anda
   const { results: restaurants } = await c.env.DB.prepare(
-    'SELECT * FROM restaurants ORDER BY created_at DESC LIMIT 50'
+    'SELECT id, name, address, phone, rating, isActive FROM restaurants ORDER BY created_at DESC LIMIT 100'
   ).all();
 
   return c.render(
-    <div>
-      <div class="flex justify-between items-center mb-6">
-        <h2 class="text-2xl font-bold">Manajemen Restoran</h2>
-        <button class="bg-blue-600 text-white px-4 py-2 rounded">Tambah Restoran</button>
+    <div class="space-y-6">
+      <div class="flex justify-between items-center">
+        <div>
+          <h2 class="text-2xl font-bold text-gray-800">Manajemen Mitra Restoran</h2>
+          <p class="text-gray-500 text-sm mt-1">Kelola data operasional dan status aktifasi seluruh gerai mitra restoran.</p>
+        </div>
       </div>
 
-      <div class="bg-white rounded shadow overflow-hidden">
-        <table class="min-w-full">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-gray-50/70 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-100">
+              <th class="px-6 py-4 font-semibold">Nama Gerai</th>
+              <th class="px-6 py-4 font-semibold">Alamat Lokasi</th>
+              <th class="px-6 py-4 font-semibold">Kontak</th>
+              <th class="px-6 py-4 font-semibold">Status Operasi</th>
+              <th class="px-6 py-4 text-right font-semibold">Aksi</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-200">
+          <tbody class="divide-y divide-gray-50 text-sm">
             {restaurants.map((resto: any) => (
-              <tr>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500">{resto.id.substring(0,8)}...</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{resto.name}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm">
-                  <span class={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${resto.isActive === 1 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                    {resto.isActive === 1 ? 'Aktif' : 'Nonaktif'}
+              <tr class="hover:bg-gray-50/50 transition-colors">
+                <td class="px-6 py-4 font-bold text-gray-800">{resto.name}</td>
+                <td class="px-6 py-4 text-gray-500 max-w-xs truncate font-medium">{resto.address}</td>
+                <td class="px-6 py-4 font-mono text-xs text-gray-600">{resto.phone || '-'}</td>
+                <td class="px-6 py-4">
+                  <span class={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-black ${resto.isActive === 1 ? 'bg-green-50 text-green-600 border border-green-100' : 'bg-red-50 text-red-600 border border-red-100'}`}>
+                    {resto.isActive === 1 ? 'AKTIF' : 'NONAKTIF'}
                   </span>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-blue-600 hover:text-blue-900 cursor-pointer">
-                  Edit
+                <td class="px-6 py-4 text-right">
+                  <button 
+                    class="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-lg border border-red-100 transition-colors"
+                    onclick={`deleteRestaurant('${resto.id}', '${resto.name}')`}
+                  >
+                    Hapus
+                  </button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </div>,
-    { title: 'Manajemen Restoran' }
-  )
+
+      <script dangerouslySetInnerHTML={{ __html: `
+        async function deleteRestaurant(restoId, restoName) {
+          const token = document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1];
+          if (!token) return alert('Sesi kedaluwarsa.');
+          if (!confirm('Apakah Anda yakin ingin menghapus restoran ' + restoName + '? Tindakan ini permanen.')) return;
+
+          try {
+            const res = await fetch('/api/v1/protected/admin/restaurants/' + restoId, {
+              method: 'DELETE',
+              headers: { 'Authorization': 'Bearer ' + token }
+            });
+            const data = await res.json();
+            if(data.success) window.location.reload();
+          } catch(e) {
+            alert('Gangguan transmisi data.');
+          }
+        }
+      `}} />
+    </div>
+  , { title: 'Manajemen Mitra Restoran' })
 })
