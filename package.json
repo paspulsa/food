@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "type": "module",
   "description": "Serverless Backend untuk ShopeeFood Clone dengan Hono dan Cloudflare V8 Pages",
-  "main": "functions/api/[[path]].ts",
   "scripts": {
     "build": "vite build --mode client && vite build",
     "dev": "vite",
