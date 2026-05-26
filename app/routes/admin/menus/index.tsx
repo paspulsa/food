@@ -1,61 +1,72 @@
 import { createRoute } from 'honox/factory'
 
 export default createRoute(async (c) => {
-  // JOIN tabel menus dengan restaurants agar nama restoran muncul
   const { results: menus } = await c.env.DB.prepare(`
-    SELECT m.id, m.name, m.description, m.created_at, r.name as restaurant_name 
+    SELECT m.id, m.name, m.description, r.name as restaurant_name 
     FROM menus m
     JOIN restaurants r ON m.restaurant_id = r.id
-    ORDER BY m.created_at DESC
-    LIMIT 100
+    ORDER BY m.created_at DESC LIMIT 100
   `).all();
 
   return c.render(
-    <div class="animate-fade-in">
-      <div class="flex justify-between items-center mb-6">
+    <div class="space-y-6">
+      <div class="flex justify-between items-center">
         <div>
           <h2 class="text-2xl font-bold text-gray-800">Katalog Kategori Menu</h2>
-          <p class="text-sm text-gray-500 mt-1">Kelola kategori produk (Makanan, Minuman, dll) dari mitra restoran.</p>
+          <p class="text-gray-500 text-sm mt-1">Konfigurasi struktur klasifikasi produk (Makanan/Minuman) per mitra restoran.</p>
         </div>
-        <button class="bg-primary hover:bg-orange-600 text-white font-semibold px-4 py-2 rounded-lg shadow-md transition-colors flex items-center gap-2">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-          Tambah Kategori
-        </button>
       </div>
 
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <table class="min-w-full">
-          <thead class="bg-gray-50/80">
-            <tr>
-              <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Kategori Menu</th>
-              <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Deskripsi</th>
-              <th class="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Milik Restoran</th>
-              <th class="px-6 py-4 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Aksi</th>
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-gray-50/70 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-100">
+              <th class="px-6 py-4 font-semibold">Nama Kategori</th>
+              <th class="px-6 py-4 font-semibold">Deskripsi Klasifikasi</th>
+              <th class="px-6 py-4 font-semibold">Mitra Restoran</th>
+              <th class="px-6 py-4 text-right font-semibold">Aksi</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-100">
+          <tbody class="divide-y divide-gray-50 text-sm">
             {menus.length === 0 ? (
-              <tr><td colspan="4" class="px-6 py-8 text-center text-gray-400">Belum ada kategori menu terdaftar</td></tr>
+              <tr><td colspan="4" class="px-6 py-8 text-center text-gray-400">Belum ada kategori menu yang terdaftar di database D1.</td></tr>
             ) : menus.map((menu: any) => (
-              <tr class="hover:bg-gray-50 transition-colors group">
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <div class="text-sm font-bold text-gray-800">{menu.name}</div>
-                  <div class="text-xs text-gray-400 font-mono mt-1" title={menu.id}>ID: {menu.id.substring(0,8)}</div>
-                </td>
-                <td class="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">{menu.description || '-'}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-primary bg-orange-50/30">
-                  {menu.restaurant_name}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button class="text-blue-600 hover:text-blue-900 mr-3 opacity-0 group-hover:opacity-100 transition-opacity">Edit</button>
-                  <button class="text-red-600 hover:text-red-900 opacity-0 group-hover:opacity-100 transition-opacity">Hapus</button>
+              <tr class="hover:bg-gray-50/50 transition-colors">
+                <td class="px-6 py-4 font-bold text-gray-800">{menu.name}</td>
+                <td class="px-6 py-4 text-gray-500 font-medium">{menu.description || '-'}</td>
+                <td class="px-6 py-4"><span class="px-2.5 py-1 rounded-lg bg-orange-50 text-primary font-bold border border-orange-100">{menu.restaurant_name}</span></td>
+                <td class="px-6 py-4 text-right">
+                  <button 
+                    class="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-2.5 py-1.5 rounded-lg border border-red-100 transition-colors"
+                    onclick={`deleteMenu('${menu.id}')`}
+                  >
+                    Hapus
+                  </button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </div>,
-    { title: 'Katalog Menu - Admin' }
-  )
+
+      <script dangerouslySetInnerHTML={{ __html: `
+        async function deleteMenu(menuId) {
+          const token = document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1];
+          if (!token) return alert('Akses ditolak.');
+          if(!confirm('Hapus kategori ini beserta seluruh produk di dalamnya?')) return;
+
+          try {
+            const res = await fetch('/api/v1/protected/admin/menus/' + menuId, {
+              method: 'DELETE',
+              headers: { 'Authorization': 'Bearer ' + token }
+            });
+            const data = await res.json();
+            if(data.success) window.location.reload();
+          } catch(e) {
+            alert('Kesalahan transmisi.');
+          }
+        }
+      `}} />
+    </div>
+  , { title: 'Katalog Kategori Menu' })
 })
