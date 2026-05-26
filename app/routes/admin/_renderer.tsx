@@ -2,13 +2,27 @@ import { jsxRenderer } from 'hono/jsx-renderer'
 
 export default jsxRenderer(({ children }) => {
   return (
-    <div class="flex h-screen bg-gray-50 overflow-hidden">
+    <div class="flex h-screen bg-gray-50 overflow-hidden relative">
+      {/* Trik Checkbox untuk Toggle Sidebar di Mobile (Tanpa JS State) */}
+      <input type="checkbox" id="sidebar-toggle" class="peer hidden" />
+
+      {/* Overlay Hitam saat Sidebar Terbuka di Mobile */}
+      <label 
+        for="sidebar-toggle" 
+        class="fixed inset-0 bg-slate-950/50 z-20 transition-opacity duration-300 md:hidden opacity-0 pointer-events-none peer-checked:opacity-100 peer-checked:pointer-events-auto"
+      ></label>
       
       {/* --- SIDEBAR KIRI --- */}
-      <aside class="w-64 bg-slate-900 text-slate-200 flex flex-col shadow-xl">
+      <aside class="fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 text-slate-200 flex flex-col shadow-xl transform -translate-x-full transition-transform duration-300 ease-in-out md:relative md:translate-x-0 peer-checked:translate-x-0">
         {/* Logo Area */}
-        <div class="h-16 flex items-center justify-center border-b border-slate-800 bg-slate-950">
+        <div class="h-16 flex items-center justify-between px-4 border-b border-slate-800 bg-slate-950">
           <h1 class="text-xl font-black text-orange-500 tracking-wider">KPKembar Admin</h1>
+          {/* Tombol Tutup Sidebar khusus Mobile */}
+          <label for="sidebar-toggle" class="p-1 rounded-md hover:bg-slate-800 text-slate-400 hover:text-white cursor-pointer md:hidden">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </label>
         </div>
         
         {/* Menu Navigasi */}
@@ -60,21 +74,28 @@ export default jsxRenderer(({ children }) => {
       {/* --- KONTEN UTAMA KANAN --- */}
       <div class="flex-1 flex flex-col min-w-0">
         {/* Header Atas */}
-        <header class="h-16 flex items-center justify-between px-8 bg-white border-b border-gray-200 shadow-sm z-10">
-          <div class="flex items-center">
-            <span class="text-sm font-medium text-gray-500">Panel Kendali Serverless</span>
+        <header class="h-16 flex items-center justify-between px-4 md:px-8 bg-white border-b border-gray-200 shadow-sm z-10 gap-4">
+          <div class="flex items-center gap-3 min-w-0">
+            {/* Tombol Hamburger Menu (Hanya muncul di Mobile) */}
+            <label for="sidebar-toggle" class="p-2 rounded-lg text-gray-600 hover:bg-gray-100 cursor-pointer md:hidden select-none">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+              </svg>
+            </label>
+            <span class="text-xs md:text-sm font-medium text-gray-500 truncate">Panel Kendali Serverless</span>
           </div>
-          <div class="flex items-center gap-3">
-            <div class="text-right">
+          
+          <div class="flex items-center gap-2 md:gap-3 flex-shrink-0">
+            <div class="text-right hidden sm:block">
               <p class="text-sm font-bold text-gray-700 leading-none">Super Admin</p>
               <p class="text-xs text-gray-500 mt-1">Administrator</p>
             </div>
-            <img class="w-9 h-9 rounded-full border border-gray-200" src="https://ui-avatars.com/api/?name=Admin&background=ee4d2d&color=fff" alt="Admin Avatar" />
+            <img class="w-8 h-8 md:w-9 md:h-9 rounded-full border border-gray-200" src="https://ui-avatars.com/api/?name=Admin&background=ee4d2d&color=fff" alt="Admin Avatar" />
           </div>
         </header>
 
         {/* Render Konten Halaman */}
-        <main class="flex-1 overflow-auto p-8">
+        <main class="flex-1 overflow-auto p-4 md:p-8">
           <div class="max-w-7xl mx-auto">
             {children}
           </div>
