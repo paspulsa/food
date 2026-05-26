@@ -29,4 +29,3 @@ R2_PUBLIC_URL = "https://kpkembarcdn.paspulsa.com"
 
 # Catatan: Untuk produksi, JWT_SECRET sebaiknya tidak ditaruh di sini.
 # Gunakan perintah terminal: npx wrangler secret put JWT_SECRET
-JWT_SECRET = "shopeefood_super_secret_key_256_untuk_dev"
