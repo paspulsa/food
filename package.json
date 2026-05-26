@@ -6,9 +6,9 @@
   "scripts": {
     "dev": "wrangler dev src/index.ts",
     "deploy": "wrangler deploy --minify src/index.ts",
-    "db:create": "wrangler d1 create shopeefood-db",
-    "db:migrate": "wrangler d1 execute shopeefood-db --local --file=./schema.sql",
-    "db:migrate:prod": "wrangler d1 execute shopeefood-db --remote --file=./schema.sql"
+    "db:create": "wrangler d1 create kpkembar",
+    "db:migrate": "wrangler d1 execute kpkembar --local --file=./schema.sql",
+    "db:migrate:prod": "wrangler d1 execute kpkembar --remote --file=./schema.sql"
   },
   "dependencies": {
     "hono": "^4.0.0"
