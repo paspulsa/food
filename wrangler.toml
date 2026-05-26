@@ -27,6 +27,3 @@ bucket_name = "kpkembar-images"
 [vars]
 # Ganti dengan URL Public R2 Anda yang didapat dari Dashboard Cloudflare
 R2_PUBLIC_URL = "https://kpkembarcdn.paspulsa.com"
-
-# Catatan: Untuk produksi, JWT_SECRET sebaiknya tidak ditaruh di sini.
-# Gunakan perintah terminal: npx wrangler secret put JWT_SECRET
