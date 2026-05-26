@@ -9,7 +9,7 @@ compatibility_flags = ["nodejs_compat"]
 # muncul di terminal saat Anda menjalankan: wrangler d1 create shopeefood-db
 [[d1_databases]]
 binding = "DB"
-database_name = "shopeefood-db"
+database_name = "kpkembar"
 database_id = "MASUKKAN_ID_DATABASE_D1_ANDA_DI_SINI"
 
 # =======================================================
@@ -18,14 +18,14 @@ database_id = "MASUKKAN_ID_DATABASE_D1_ANDA_DI_SINI"
 # Pastikan Anda sudah membuat bucket R2 bernama 'shopeefood-images'
 [[r2_buckets]]
 binding = "IMAGE_BUCKET"
-bucket_name = "shopeefood-images"
+bucket_name = "kpkembar-images"
 
 # =======================================================
 # VARIABEL LINGKUNGAN (ENVIRONMENT VARIABLES)
 # =======================================================
 [vars]
 # Ganti dengan URL Public R2 Anda yang didapat dari Dashboard Cloudflare
-R2_PUBLIC_URL = "https://pub-xxxxxxxxx.r2.dev"
+R2_PUBLIC_URL = "https://kpkembarcdn.paspulsa.com"
 
 # Catatan: Untuk produksi, JWT_SECRET sebaiknya tidak ditaruh di sini.
 # Gunakan perintah terminal: npx wrangler secret put JWT_SECRET
