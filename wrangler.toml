@@ -1,0 +1,32 @@
+name = "shopeefood-hono-backend"
+compatibility_date = "2024-03-20"
+compatibility_flags = ["nodejs_compat"]
+
+# =======================================================
+# KONFIGURASI DATABASE CLOUDFLARE D1
+# =======================================================
+# Pastikan Anda mengganti 'database_id' dengan ID asli yang 
+# muncul di terminal saat Anda menjalankan: wrangler d1 create shopeefood-db
+[[d1_databases]]
+binding = "DB"
+database_name = "shopeefood-db"
+database_id = "MASUKKAN_ID_DATABASE_D1_ANDA_DI_SINI"
+
+# =======================================================
+# KONFIGURASI STORAGE CLOUDFLARE R2 (Untuk Gambar)
+# =======================================================
+# Pastikan Anda sudah membuat bucket R2 bernama 'shopeefood-images'
+[[r2_buckets]]
+binding = "IMAGE_BUCKET"
+bucket_name = "shopeefood-images"
+
+# =======================================================
+# VARIABEL LINGKUNGAN (ENVIRONMENT VARIABLES)
+# =======================================================
+[vars]
+# Ganti dengan URL Public R2 Anda yang didapat dari Dashboard Cloudflare
+R2_PUBLIC_URL = "https://pub-xxxxxxxxx.r2.dev"
+
+# Catatan: Untuk produksi, JWT_SECRET sebaiknya tidak ditaruh di sini.
+# Gunakan perintah terminal: npx wrangler secret put JWT_SECRET
+JWT_SECRET = "shopeefood_super_secret_key_256_untuk_dev"
