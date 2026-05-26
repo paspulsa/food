@@ -72,6 +72,40 @@ orderRouter.get('/:id', async (c) => {
   });
 });
 
+// CREATE NEW ORDER (Checkout dari Mobile App User)
+orderRouter.post('/', async (c) => {
+  const body = await c.req.json();
+  const user = c.get('jwtPayload'); // Mendapatkan ID User dari Token JWT
+  
+  const orderId = crypto.randomUUID();
+  const { restaurant_id, address, total_price, items } = body; 
+  // items harus berbentuk array of object: [{ menu_item_id, quantity, price }]
+
+  if (!items || items.length === 0) {
+    return c.json({ success: false, message: 'Keranjang belanja kosong!' }, 400);
+  }
+
+  // 1. Siapkan Query untuk tabel utama Orders
+  const insertOrderStmt = c.env.DB.prepare(
+    `INSERT INTO orders (id, user_id, restaurant_id, total_price, address, status) VALUES (?, ?, ?, ?, ?, 'PENDING')`
+  ).bind(orderId, user.id, restaurant_id, total_price, address);
+
+  // 2. Siapkan barisan Query untuk tabel Order Details
+  const insertDetailsStmts = items.map((item: any) => {
+    return c.env.DB.prepare(
+      `INSERT INTO order_details (id, order_id, menu_item_id, quantity, price) VALUES (?, ?, ?, ?, ?)`
+    ).bind(crypto.randomUUID(), orderId, item.menu_item_id, item.quantity, item.price);
+  });
+
+  // 3. Eksekusi semua secara serentak (Database Transaction / Batch)
+  try {
+    await c.env.DB.batch([insertOrderStmt, ...insertDetailsStmts]);
+    return c.json({ success: true, message: 'Pesanan berhasil dibuat!', data: { orderId } }, 201);
+  } catch (error) {
+    return c.json({ success: false, message: 'Gagal memproses pesanan.' }, 500);
+  }
+});
+
 // Mengubah Status Pesanan (PENDING -> PREPARING -> DELIVERING -> COMPLETED / CANCELLED)
 orderRouter.put('/:id/status', async (c) => {
   const id = c.req.param('id');
