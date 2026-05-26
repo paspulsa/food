@@ -4,17 +4,17 @@
   "description": "Serverless Backend untuk ShopeeFood Clone dengan Hono dan Cloudflare V8 Pages",
   "main": "functions/api/[[path]].ts",
   "scripts": {
-    "dev": "wrangler pages dev public",
-    "db:create": "wrangler d1 create kpkembar",
-    "db:migrate": "wrangler d1 execute kpkembar --local --file=./schema.sql",
-    "db:migrate:prod": "wrangler d1 execute kpkembar --remote --file=./schema.sql"
+    "build": "vite build --mode client && vite build"
   },
   "dependencies": {
-    "hono": "^4.0.0"
+    "hono": "^4.0.0",
+    "honox": "^0.1.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240320.1",
+    "@hono/vite-cloudflare-pages": "^0.3.0",
     "typescript": "^5.0.0",
+    "vite": "^5.0.0",
     "wrangler": "^3.0.0"
   },
   "engines": {
