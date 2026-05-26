@@ -1,78 +1,88 @@
 import { createRoute } from 'honox/factory'
 
 export default createRoute(async (c) => {
-  // Query Join untuk mendapatkan nama relasi
   const { results: orders } = await c.env.DB.prepare(`
-    SELECT o.id, o.total_price, o.status, o.created_at, 
-           u.name as user_name, r.name as restaurant_name 
+    SELECT o.id, o.total_price, o.status, o.created_at, u.name as user_name, r.name as restaurant_name 
     FROM orders o
     JOIN users u ON o.user_id = u.id
     JOIN restaurants r ON o.restaurant_id = r.id
-    ORDER BY o.created_at DESC
-    LIMIT 100
+    ORDER BY o.created_at DESC LIMIT 100
   `).all();
 
-  const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR' });
-
-  // Fungsi utilitas warna badge status
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'PENDING': return 'bg-yellow-100 text-yellow-800';
-      case 'PREPARING': return 'bg-blue-100 text-blue-800';
-      case 'DELIVERING': return 'bg-orange-100 text-orange-800';
-      case 'COMPLETED': return 'bg-green-100 text-green-800';
-      case 'CANCELLED': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
+  const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 
   return c.render(
-    <div>
-      <div class="flex justify-between items-center mb-6">
-        <h2 class="text-2xl font-bold">Riwayat Pesanan</h2>
+    <div class="space-y-6">
+      <div>
+        <h2 class="text-2xl font-bold text-gray-800">Manajemen Distribusi Pesanan</h2>
+        <p class="text-gray-500 text-sm mt-1">Perbarui siklus proses pengiriman pesanan kuliner secara real-time.</p>
       </div>
 
-      <div class="bg-white rounded shadow overflow-hidden">
-        <table class="min-w-full">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID Trx</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Pembeli</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Restoran</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-gray-50/70 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-100">
+              <th class="px-6 py-4 font-semibold">ID Transaksi</th>
+              <th class="px-6 py-4 font-semibold">Detail Entitas</th>
+              <th class="px-6 py-4 font-semibold">Total Tagihan</th>
+              <th class="px-6 py-4 font-semibold">Alur Status</th>
+              <th class="px-6 py-4 text-right font-semibold">Aksi Kontrol</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-200">
+          <tbody class="divide-y divide-gray-50 text-sm">
             {orders.map((order: any) => (
-              <tr class="hover:bg-gray-50">
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500" title={order.id}>
-                  {order.id.substring(0, 8)}...
+              <tr class="hover:bg-gray-50/50 transition-colors">
+                <td class="px-6 py-4 font-bold font-mono text-xs text-gray-600">#{order.id.substring(0,8)}</td>
+                <td class="px-6 py-4">
+                  <div class="font-semibold text-gray-800">{order.user_name}</div>
+                  <div class="text-xs text-gray-400 mt-0.5">{order.restaurant_name}</div>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.user_name}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{order.restaurant_name}</td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
-                  {formatter.format(order.total_price)}
+                <td class="px-6 py-4 font-extrabold text-gray-800">{formatter.format(order.total_price)}</td>
+                <td class="px-6 py-4">
+                  <span class={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-black ${
+                    order.status === 'COMPLETED' ? 'bg-green-50 text-green-600 border border-green-100' :
+                    order.status === 'PENDING' ? 'bg-yellow-50 text-yellow-600 border border-yellow-100' :
+                    order.status === 'CANCELLED' ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-blue-50 text-blue-600 border border-blue-100'
+                  }`}>{order.status}</span>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <span class={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(order.status)}`}>
-                    {order.status}
-                  </span>
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                  <a href={`/admin/orders/${order.id}`} class="text-indigo-600 hover:text-indigo-900">Detail</a>
-                  {/* Di sisi client nanti (React/Alpine), tombol ini akan memanggil API: PUT /api/v1/protected/admin/orders/:id/status */}
-                  {order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && (
-                    <button class="text-blue-600 hover:text-blue-900">Ubah Status</button>
-                  )}
+                <td class="px-6 py-4 text-right">
+                  <select 
+                    class="text-xs font-bold border border-gray-200 rounded-lg p-1.5 bg-white focus:outline-none focus:border-primary"
+                    onchange={`changeStatusTrx('${order.id}', this.value)`}
+                  >
+                    {['PENDING', 'PREPARING', 'DELIVERING', 'COMPLETED', 'CANCELLED'].map((st) => (
+                      <option value={st} selected={order.status === st}>{st}</option>
+                    ))}
+                  </select>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </div>,
-    { title: 'Manajemen Pesanan' }
-  )
+
+      <script dangerouslySetInnerHTML={{ __html: `
+        async function changeStatusTrx(orderId, nextStatus) {
+          const token = document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1];
+          if (!token) return alert('Otorisasi kedaluwarsa.');
+          
+          try {
+            const res = await fetch('/api/v1/protected/admin/orders/' + orderId + '/status', {
+              method: 'PUT',
+              headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+              },
+              body: JSON.stringify({ status: nextStatus })
+            });
+            const data = await res.json();
+            if(data.success) window.location.reload();
+            else alert(data.message || 'Gagal mengubah status.');
+          } catch(e) {
+            alert('Gangguan komunikasi dengan serverless cluster.');
+          }
+        }
+      `}} />
+    </div>
+  , { title: 'Manajemen Transaksi' })
 })
