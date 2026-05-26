@@ -16,16 +16,10 @@ authRouter.post('/login', async (c) => {
     return c.json({ success: false, message: 'Email atau password salah!' }, 401);
   }
 
-  // Verifikasi password langsung (Sesuai dengan data teks murni bawaan skema)
   if (user.password !== password) {
     return c.json({ success: false, message: 'Email atau password salah!' }, 401);
   }
 
-  if (user.isActive === 0) {
-    return c.json({ success: false, message: 'Akun Anda belum aktif!' }, 403);
-  }
-
-  // Membuat Payload JWT dengan waktu kedaluwarsa 24 Jam
   const payload = {
     id: user.id,
     email: user.email,
@@ -38,7 +32,6 @@ authRouter.post('/login', async (c) => {
   return c.json({
     success: true,
     status: 'ok',
-    type: 'account',
     currentAuthority: user.role,
     token: token,
     user: {
@@ -46,36 +39,29 @@ authRouter.post('/login', async (c) => {
       name: user.name,
       email: user.email,
       role: user.role,
-      avatar: user.avatar,
-      gender: user.gender,
-      accountType: user.accountType
+      avatar: user.avatar
     }
   });
 });
 
-// Logika Registrasi User Baru (Mengakomodasi field default Mongoose)
+// Logika Registrasi yang sudah disesuaikan dengan skema tabel terbaru
 authRouter.post('/register', async (c) => {
   const body = await c.req.json();
   const id = crypto.randomUUID();
 
   try {
+    // Hanya memasukkan kolom yang ada di database. Role otomatis 'USER' sesuai DEFAULT.
     await c.env.DB.prepare(
-      `INSERT INTO users (id, name, email, password, age, gender, address, role, phone, avatar, isActive, accountType) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'LOCAL')`
+      `INSERT INTO users (id, name, email, password, avatar) VALUES (?, ?, ?, ?, ?)`
     ).bind(
       id,
       body.name,
       body.email,
       body.password,
-      body.age || null,
-      body.gender || 'UNKNOWN',
-      body.address || null,
-      'USER',
-      body.phone || null,
       'default-user.png'
     ).run();
 
-    return c.json({ success: true, message: 'Registrasi berhasil, silakan tunggu aktivasi admin.' }, 201);
+    return c.json({ success: true, message: 'Registrasi berhasil, silakan login.' }, 201);
   } catch (error: any) {
     if (error.message.includes('UNIQUE constraint failed')) {
       return c.json({ success: false, message: 'Email sudah terdaftar!' }, 400);
