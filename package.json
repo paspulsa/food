@@ -1,0 +1,24 @@
+{
+  "name": "kpkembar",
+  "version": "1.0.0",
+  "description": "Serverless Backend untuk ShopeeFood Clone dengan Hono dan Cloudflare V8",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev src/index.ts",
+    "deploy": "wrangler deploy --minify src/index.ts",
+    "db:create": "wrangler d1 create shopeefood-db",
+    "db:migrate": "wrangler d1 execute shopeefood-db --local --file=./schema.sql",
+    "db:migrate:prod": "wrangler d1 execute shopeefood-db --remote --file=./schema.sql"
+  },
+  "dependencies": {
+    "hono": "^4.0.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240320.1",
+    "typescript": "^5.0.0",
+    "wrangler": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
