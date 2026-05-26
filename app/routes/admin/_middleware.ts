@@ -1,8 +1,8 @@
-import { createMiddleware } from 'hono/factory'
+import { createRoute } from 'honox/factory'
 import { getCookie } from 'hono/cookie'
 import { verify } from 'hono/jwt'
 
-export default createMiddleware(async (c, next) => {
+export default createRoute(async (c, next) => {
   const token = getCookie(c, 'admin_token')
   
   if (!token) {
