@@ -4,7 +4,7 @@ import { logger } from 'hono/logger';
 import { jwt } from 'hono/jwt';
 import { Bindings, Variables } from './types';
 
-// Import Seluruh Router Komponen
+// Import Seluruh Router Komponen secara Lengkap
 import { authRouter } from './routes/auth';
 import { restaurantRouter } from './routes/restaurants';
 import { userRouter } from './routes/users';
@@ -13,6 +13,7 @@ import { menuItemRouter } from './routes/menuItems';
 import { orderRouter } from './routes/orders';
 import { uploadRouter } from './routes/uploads';
 
+// Inisialisasi Aplikasi Hono dengan Base Path
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>().basePath('/api/v1');
 
 // Middleware Global
@@ -23,20 +24,39 @@ app.use('*', cors({
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
 
-// Rute Publik (Tanpa Autentikasi)
+// ==========================================
+// 1. RUTE PUBLIK (Dapat diakses tanpa login)
+// ==========================================
 app.route('/auth', authRouter);
 app.route('/public/restaurants', restaurantRouter);
 app.route('/public/menus', menuRouter);
 app.route('/public/menu-items', menuItemRouter);
 
-// Middleware Proteksi JWT HS256 untuk Area Admin
-app.use('/admin/*', async (c, next) => {
+// ==========================================
+// 2. MIDDLEWARE JWT GLOBAL (Area Terproteksi)
+// ==========================================
+// Semua request yang mengarah ke path /protected/* wajib memiliki Token JWT yang valid
+app.use('/protected/*', async (c, next) => {
   const middleware = jwt({ secret: c.env.JWT_SECRET, alg: 'HS256' });
   return middleware(c, next);
 });
 
-// Middleware Validasi Role ADMIN (Role Guard)
-app.use('/admin/*', async (c, next) => {
+// ==========================================
+// 3. RUTE KHUSUS USER (Aplikasi Mobile)
+// ==========================================
+// Rute ini hanya membutuhkan token JWT valid (Role USER maupun ADMIN bisa akses)
+app.route('/protected/user/orders', orderRouter);
+app.route('/protected/user/profile', userRouter);
+
+// (Opsional) Jika nanti file likes.ts dan reviews.ts sudah Anda buat:
+// app.route('/protected/user/likes', likeRouter);
+// app.route('/protected/user/reviews', reviewRouter);
+
+// ==========================================
+// 4. ROLE GUARD (Khusus Area Admin)
+// ==========================================
+// Middleware ini memblokir siapapun yang rolenya bukan ADMIN
+app.use('/protected/admin/*', async (c, next) => {
   const payload = c.get('jwtPayload');
   if (payload.role !== 'ADMIN') {
     return c.json({ success: false, message: 'Akses ditolak. Anda bukan Admin!' }, 403);
@@ -44,12 +64,14 @@ app.use('/admin/*', async (c, next) => {
   await next();
 });
 
-// Registrasi Rute Terproteksi Admin (CRUD Lengkap)
-app.route('/admin/restaurants', restaurantRouter);
-app.route('/admin/users', userRouter);
-app.route('/admin/menus', menuRouter);
-app.route('/admin/menu-items', menuItemRouter);
-app.route('/admin/orders', orderRouter);
-app.route('/admin/uploads', uploadRouter);
+// ==========================================
+// 5. RUTE KHUSUS ADMIN (Web Dashboard)
+// ==========================================
+app.route('/protected/admin/restaurants', restaurantRouter);
+app.route('/protected/admin/users', userRouter);
+app.route('/protected/admin/menus', menuRouter);
+app.route('/protected/admin/menu-items', menuItemRouter);
+app.route('/protected/admin/orders', orderRouter);
+app.route('/protected/admin/uploads', uploadRouter);
 
 export default app;
