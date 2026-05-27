@@ -71,7 +71,7 @@ app.use('/protected/admin/*', async (c, next) => {
 // ==========================================
 app.route('/protected/admin/restaurants', restaurantRouter);
 app.route('/protected/admin/users', userRouter);
-app.route('/protected/admin/menus', menuRouter);
+app.route('/protected/admin/menu-categories', menuCategoryRouter);
 app.route('/protected/admin/menu-items', menuItemRouter);
 app.route('/protected/admin/orders', orderRouter);
 app.route('/protected/admin/uploads', uploadRouter);
