@@ -3,7 +3,7 @@ import { Bindings, Variables } from '../types';
 
 export const menuRouter = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// 1. GET: Ambil Kategori Menu (Publik & Admin)
+// GET KATEGORI (Mendukung Filter Multi-Tenant berdasarkan restaurant_id)
 menuRouter.get('/', async (c) => {
   try {
     const restaurant_id = c.req.query('restaurant_id');
@@ -11,7 +11,7 @@ menuRouter.get('/', async (c) => {
     let query = 'SELECT * FROM menus';
     let params: any[] = [];
 
-    // Filter by Tenant (Gerai)
+    // Tampilkan hanya kategori milik gerai tertentu
     if (restaurant_id) {
       query += ' WHERE restaurant_id = ? ORDER BY created_at ASC';
       params.push(restaurant_id);
@@ -26,11 +26,10 @@ menuRouter.get('/', async (c) => {
   }
 });
 
-// 2. POST: Tambah Kategori Menu Baru
+// TAMBAH KATEGORI (Proteksi Area Admin & Validasi Gerai)
 menuRouter.post('/', async (c) => {
-  // KEAMANAN TINGKAT TINGGI: Pastikan endpoint ini diakses via area terproteksi
   const payload = c.get('jwtPayload');
-  if (!payload) return c.json({ success: false, message: 'Akses ditolak. Otorisasi tidak valid!' }, 401);
+  if (!payload) return c.json({ success: false, message: 'Akses ditolak. Silakan login!' }, 401);
 
   try {
     const body = await c.req.json();
@@ -40,10 +39,10 @@ menuRouter.post('/', async (c) => {
       return c.json({ success: false, message: 'ID Gerai dan Nama Kategori wajib diisi!' }, 400);
     }
 
-    // VALIDASI MULTI-TENANT: Pastikan gerai yang dimaksud benar-benar eksis
+    // Pengecekan eksistensi gerai agar data tidak yatim piatu
     const checkResto = await c.env.DB.prepare('SELECT id FROM restaurants WHERE id = ?').bind(body.restaurant_id).first();
     if (!checkResto) {
-      return c.json({ success: false, message: 'Gagal! Gerai / Restoran tidak ditemukan di basis data.' }, 404);
+      return c.json({ success: false, message: 'Gagal! Gerai / Restoran tujuan tidak ditemukan.' }, 404);
     }
 
     await c.env.DB.prepare(
@@ -53,14 +52,14 @@ menuRouter.post('/', async (c) => {
     return c.json({ 
       success: true, 
       message: 'Kategori menu berhasil ditambahkan ke gerai.', 
-      data: { id, restaurant_id: body.restaurant_id, name: body.name } 
+      data: { id, restaurant_id: body.restaurant_id } 
     }, 201);
   } catch (error: any) {
-    return c.json({ success: false, message: 'Kesalahan saat menyimpan kategori: ' + error.message }, 500);
+    return c.json({ success: false, message: 'Kesalahan sistem saat menyimpan kategori.' }, 500);
   }
 });
 
-// 3. PUT: Perbarui Kategori Menu
+// UPDATE KATEGORI MENU (Proteksi Area Admin)
 menuRouter.put('/:id', async (c) => {
   const payload = c.get('jwtPayload');
   if (!payload) return c.json({ success: false, message: 'Akses ditolak.' }, 401);
@@ -70,25 +69,24 @@ menuRouter.put('/:id', async (c) => {
     const body = await c.req.json();
 
     if (!body.name) {
-      return c.json({ success: false, message: 'Nama kategori tidak boleh kosong!' }, 400);
+      return c.json({ success: false, message: 'Nama kategori tidak boleh dikosongkan!' }, 400);
     }
 
     const result = await c.env.DB.prepare(
       'UPDATE menus SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
     ).bind(body.name, body.description || null, id).run();
 
-    // Verifikasi apakah data benar-benar terupdate
     if (result.meta.changes === 0) {
-      return c.json({ success: false, message: 'Kategori tidak ditemukan atau sudah dihapus.' }, 404);
+      return c.json({ success: false, message: 'Kategori tidak ditemukan.' }, 404);
     }
 
     return c.json({ success: true, message: 'Informasi kategori berhasil diperbarui.' }, 200);
   } catch (error) {
-    return c.json({ success: false, message: 'Kesalahan sistem saat memperbarui kategori.' }, 500);
+    return c.json({ success: false, message: 'Kesalahan sistem saat memperbarui data.' }, 500);
   }
 });
 
-// 4. DELETE: Hapus Kategori Menu beserta Isi Produknya
+// HAPUS KATEGORI (Proteksi Area Admin)
 menuRouter.delete('/:id', async (c) => {
   const payload = c.get('jwtPayload');
   if (!payload) return c.json({ success: false, message: 'Akses ditolak.' }, 401);
@@ -101,8 +99,8 @@ menuRouter.delete('/:id', async (c) => {
       return c.json({ success: false, message: 'Kategori tidak ditemukan.' }, 404);
     }
 
-    return c.json({ success: true, message: 'Kategori menu dan seluruh produk di dalamnya berhasil dihapus (Cascade).' }, 200);
+    return c.json({ success: true, message: 'Kategori menu dan seluruh produk di dalamnya berhasil dihapus.' }, 200);
   } catch (error) {
-    return c.json({ success: false, message: 'Terjadi kesalahan sistem saat proses penghapusan.' }, 500);
+    return c.json({ success: false, message: 'Kesalahan sistem saat menghapus data.' }, 500);
   }
 });
