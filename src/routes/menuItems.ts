@@ -6,20 +6,16 @@ export const menuItemRouter = new Hono<{ Bindings: Bindings; Variables: Variable
 // ==========================================
 // 1. PUBLIC API (UNTUK PELANGGAN / STORE WEB)
 // ==========================================
-// Menampilkan produk yang is_available = 1.
-// Jika category_id dikirim, maka difilter. Jika tidak, tampilkan semua.
 menuItemRouter.get('/public', async (c) => {
   const category_id = c.req.query('category_id');
   let results = [];
 
   if (category_id) {
-    // Tampilkan berdasarkan kategori tertentu
     const query = await c.env.DB.prepare(
       'SELECT * FROM menu_items WHERE category_id = ? AND is_available = 1 ORDER BY created_at DESC'
     ).bind(category_id).all();
     results = query.results;
   } else {
-    // Tampilkan SEMUA menu yang tersedia
     const query = await c.env.DB.prepare(
       'SELECT * FROM menu_items WHERE is_available = 1 ORDER BY created_at DESC'
     ).all();
@@ -29,24 +25,19 @@ menuItemRouter.get('/public', async (c) => {
   return c.json({ success: true, data: results });
 });
 
-
 // ==========================================
 // 2. ADMIN API (UNTUK DASHBOARD ADMIN)
 // ==========================================
-
-// Ambil Item Produk (Termasuk yang disembunyikan/arsip)
 menuItemRouter.get('/', async (c) => {
   const category_id = c.req.query('category_id');
   let results = [];
 
   if (category_id) {
-    // Ambil data untuk satu kategori saja
     const query = await c.env.DB.prepare(
       'SELECT * FROM menu_items WHERE category_id = ? ORDER BY created_at DESC'
     ).bind(category_id).all();
     results = query.results;
   } else {
-    // Ambil SEMUA data menu (tanpa filter kategori)
     const query = await c.env.DB.prepare(
       'SELECT * FROM menu_items ORDER BY created_at DESC'
     ).all();
@@ -64,8 +55,9 @@ menuItemRouter.post('/', async (c) => {
   await c.env.DB.prepare(
     `INSERT INTO menu_items (
       id, category_id, name, description, price, image, 
-      is_available, stock, is_promo, promo_price, end_promo_time, hpp
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      is_available, stock, is_promo, promo_price, end_promo_time, hpp,
+      is_custom, custom_options
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     id, 
     body.category_id, 
@@ -78,7 +70,9 @@ menuItemRouter.post('/', async (c) => {
     body.is_promo || 0,
     body.promo_price || 0,
     body.end_promo_time || null,
-    body.hpp || 0
+    body.hpp || 0,
+    body.is_custom || 0,
+    body.custom_options || '[]'
   ).run();
 
   return c.json({ success: true, message: 'Item menu berhasil ditambahkan', data: { id } }, 201);
@@ -89,7 +83,6 @@ menuItemRouter.put('/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
 
-  // (Opsional) Deteksi jika yang diupdate HANYA stok saja dari tombol cepat Dashboard POS
   if (Object.keys(body).length === 1 && body.stock !== undefined) {
     await c.env.DB.prepare(
       `UPDATE menu_items SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
@@ -97,12 +90,11 @@ menuItemRouter.put('/:id', async (c) => {
     return c.json({ success: true, message: 'Stok instan berhasil diperbarui' });
   }
 
-  // Update keseluruhan form produk
   await c.env.DB.prepare(
     `UPDATE menu_items 
      SET category_id = ?, name = ?, description = ?, price = ?, image = ?, 
          is_available = ?, stock = ?, is_promo = ?, promo_price = ?, end_promo_time = ?, hpp = ?,
-         updated_at = CURRENT_TIMESTAMP 
+         is_custom = ?, custom_options = ?, updated_at = CURRENT_TIMESTAMP 
      WHERE id = ?`
   ).bind(
     body.category_id,
@@ -116,6 +108,8 @@ menuItemRouter.put('/:id', async (c) => {
     body.promo_price || 0,
     body.end_promo_time || null,
     body.hpp || 0,
+    body.is_custom || 0,
+    body.custom_options || '[]',
     id
   ).run();
 
