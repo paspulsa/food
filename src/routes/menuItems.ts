@@ -6,17 +6,25 @@ export const menuItemRouter = new Hono<{ Bindings: Bindings; Variables: Variable
 // ==========================================
 // 1. PUBLIC API (UNTUK PELANGGAN / STORE WEB)
 // ==========================================
-// Hanya menampilkan produk yang is_available = 1 (Tersedia / Aktif)
+// Menampilkan produk yang is_available = 1.
+// Jika category_id dikirim, maka difilter. Jika tidak, tampilkan semua.
 menuItemRouter.get('/public', async (c) => {
-  const { category_id } = c.req.query();
+  const category_id = c.req.query('category_id');
+  let results = [];
 
-  if (!category_id) {
-    return c.json({ success: false, message: 'Parameter category_id wajib diisi!' }, 400);
+  if (category_id) {
+    // Tampilkan berdasarkan kategori tertentu
+    const query = await c.env.DB.prepare(
+      'SELECT * FROM menu_items WHERE category_id = ? AND is_available = 1 ORDER BY created_at DESC'
+    ).bind(category_id).all();
+    results = query.results;
+  } else {
+    // Tampilkan SEMUA menu yang tersedia
+    const query = await c.env.DB.prepare(
+      'SELECT * FROM menu_items WHERE is_available = 1 ORDER BY created_at DESC'
+    ).all();
+    results = query.results;
   }
-
-  const { results } = await c.env.DB.prepare(
-    'SELECT * FROM menu_items WHERE category_id = ? AND is_available = 1 ORDER BY created_at DESC'
-  ).bind(category_id).all();
 
   return c.json({ success: true, data: results });
 });
@@ -26,17 +34,24 @@ menuItemRouter.get('/public', async (c) => {
 // 2. ADMIN API (UNTUK DASHBOARD ADMIN)
 // ==========================================
 
-// Ambil Semua Item Produk (Termasuk yang disembunyikan/arsip)
+// Ambil Item Produk (Termasuk yang disembunyikan/arsip)
 menuItemRouter.get('/', async (c) => {
-  const { category_id } = c.req.query();
+  const category_id = c.req.query('category_id');
+  let results = [];
 
-  if (!category_id) {
-    return c.json({ success: false, message: 'Parameter category_id wajib diisi!' }, 400);
+  if (category_id) {
+    // Ambil data untuk satu kategori saja
+    const query = await c.env.DB.prepare(
+      'SELECT * FROM menu_items WHERE category_id = ? ORDER BY created_at DESC'
+    ).bind(category_id).all();
+    results = query.results;
+  } else {
+    // Ambil SEMUA data menu (tanpa filter kategori)
+    const query = await c.env.DB.prepare(
+      'SELECT * FROM menu_items ORDER BY created_at DESC'
+    ).all();
+    results = query.results;
   }
-
-  const { results } = await c.env.DB.prepare(
-    'SELECT * FROM menu_items WHERE category_id = ? ORDER BY created_at DESC'
-  ).bind(category_id).all();
 
   return c.json({ success: true, data: results });
 });
