@@ -37,8 +37,9 @@ export default createRoute(async (c) => {
   // ==========================================
   // 2. TARIK DATA DARI DATABASE (Katalog, Menu, dan Promo Banner)
   // ==========================================
+  // Ambil Kategori Dinamis: Limit 12 agar pas untuk 2 baris x 6 kolom
   const { results: categories } = await c.env.DB.prepare(
-    'SELECT id, name, image FROM menu_categories WHERE is_active = 1 ORDER BY sort_order ASC LIMIT 8'
+    'SELECT id, name, image FROM menu_categories WHERE is_active = 1 ORDER BY sort_order ASC LIMIT 12'
   ).all();
 
   const { results: promoItems } = await c.env.DB.prepare(
@@ -110,18 +111,18 @@ export default createRoute(async (c) => {
             </div>
           )}
 
-          {/* Kategori Grid */}
+          {/* KATEGORI GRID (6 Kolom per Baris) */}
           <div class="px-4 mt-4">
-            <div class="grid grid-cols-4 gap-y-4 gap-x-2">
+            <div class="grid grid-cols-6 gap-y-4 gap-x-1 sm:gap-x-2">
               {categories.length > 0 ? categories.map((cat: any) => (
                 <div class="flex flex-col items-center gap-1.5 cursor-pointer group">
-                  <div class="w-12 h-12 bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center p-1.5 group-hover:bg-orange-50 transition overflow-hidden">
+                  <div class="w-[46px] h-[46px] sm:w-[50px] sm:h-[50px] bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center p-1.5 group-hover:bg-orange-50 transition overflow-hidden">
                     <img src={cat.image || `https://ui-avatars.com/api/?name=${cat.name}&background=ee4d2d&color=fff`} class="w-full h-full object-contain" alt={cat.name} />
                   </div>
-                  <span class="text-[10px] text-center font-semibold text-gray-700 leading-tight">{cat.name}</span>
+                  <span class="text-[9px] text-center font-bold text-gray-700 leading-tight line-clamp-2 px-0.5">{cat.name}</span>
                 </div>
               )) : (
-                <div class="col-span-4 text-center text-xs text-gray-400 py-2">Belum ada kategori.</div>
+                <div class="col-span-6 text-center text-xs text-gray-400 py-2">Belum ada kategori.</div>
               )}
             </div>
           </div>
