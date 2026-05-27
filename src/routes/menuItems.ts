@@ -3,17 +3,40 @@ import { Bindings, Variables } from '../types';
 
 export const menuItemRouter = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// Ambil Semua Item Produk Berdasarkan Kategori Menu ID
-menuItemRouter.get('/', async (c) => {
-  const { menu_id } = c.req.query();
+// ==========================================
+// 1. PUBLIC API (UNTUK PELANGGAN / STORE WEB)
+// ==========================================
+// Hanya menampilkan produk yang is_available = 1 (Tersedia / Aktif)
+menuItemRouter.get('/public', async (c) => {
+  const { category_id } = c.req.query();
 
-  if (!menu_id) {
-    return c.json({ success: false, message: 'Parameter menu_id wajib diisi!' }, 400);
+  if (!category_id) {
+    return c.json({ success: false, message: 'Parameter category_id wajib diisi!' }, 400);
   }
 
   const { results } = await c.env.DB.prepare(
-    'SELECT * FROM menu_items WHERE menu_id = ? ORDER BY created_at DESC'
-  ).bind(menu_id).all();
+    'SELECT * FROM menu_items WHERE category_id = ? AND is_available = 1 ORDER BY created_at DESC'
+  ).bind(category_id).all();
+
+  return c.json({ success: true, data: results });
+});
+
+
+// ==========================================
+// 2. ADMIN API (UNTUK DASHBOARD ADMIN)
+// ==========================================
+
+// Ambil Semua Item Produk (Termasuk yang disembunyikan/arsip)
+menuItemRouter.get('/', async (c) => {
+  const { category_id } = c.req.query();
+
+  if (!category_id) {
+    return c.json({ success: false, message: 'Parameter category_id wajib diisi!' }, 400);
+  }
+
+  const { results } = await c.env.DB.prepare(
+    'SELECT * FROM menu_items WHERE category_id = ? ORDER BY created_at DESC'
+  ).bind(category_id).all();
 
   return c.json({ success: true, data: results });
 });
@@ -24,15 +47,23 @@ menuItemRouter.post('/', async (c) => {
   const id = crypto.randomUUID();
 
   await c.env.DB.prepare(
-    `INSERT INTO menu_items (id, menu_id, name, description, price, image) 
-     VALUES (?, ?, ?, ?, ?, ?)`
+    `INSERT INTO menu_items (
+      id, category_id, name, description, price, image, 
+      is_available, stock, is_promo, promo_price, end_promo_time, hpp
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).bind(
     id, 
-    body.menu_id, 
+    body.category_id, 
     body.name, 
     body.description || null, 
-    body.price, 
-    body.image || null
+    body.price || 0, 
+    body.image || null,
+    body.is_available !== undefined ? body.is_available : 1,
+    body.stock || 0,
+    body.is_promo || 0,
+    body.promo_price || 0,
+    body.end_promo_time || null,
+    body.hpp || 0
   ).run();
 
   return c.json({ success: true, message: 'Item menu berhasil ditambahkan', data: { id } }, 201);
@@ -43,11 +74,35 @@ menuItemRouter.put('/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
 
+  // (Opsional) Deteksi jika yang diupdate HANYA stok saja dari tombol cepat Dashboard POS
+  if (Object.keys(body).length === 1 && body.stock !== undefined) {
+    await c.env.DB.prepare(
+      `UPDATE menu_items SET stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).bind(body.stock, id).run();
+    return c.json({ success: true, message: 'Stok instan berhasil diperbarui' });
+  }
+
+  // Update keseluruhan form produk
   await c.env.DB.prepare(
     `UPDATE menu_items 
-     SET name = ?, description = ?, price = ?, image = ?, updated_at = CURRENT_TIMESTAMP 
+     SET category_id = ?, name = ?, description = ?, price = ?, image = ?, 
+         is_available = ?, stock = ?, is_promo = ?, promo_price = ?, end_promo_time = ?, hpp = ?,
+         updated_at = CURRENT_TIMESTAMP 
      WHERE id = ?`
-  ).bind(body.name, body.description || null, body.price, body.image || null, id).run();
+  ).bind(
+    body.category_id,
+    body.name, 
+    body.description || null, 
+    body.price || 0, 
+    body.image || null,
+    body.is_available !== undefined ? body.is_available : 1,
+    body.stock || 0,
+    body.is_promo || 0,
+    body.promo_price || 0,
+    body.end_promo_time || null,
+    body.hpp || 0,
+    id
+  ).run();
 
   return c.json({ success: true, message: 'Item menu berhasil diperbarui' });
 });
