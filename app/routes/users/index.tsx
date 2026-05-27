@@ -10,14 +10,12 @@ export default createRoute(async (c) => {
   let userName = '';
   let isUserLoggedIn = false;
 
-  // Baca cookie 'token' (standar token user pada sistem Anda)
   const token = getCookie(c, 'token');
   
   if (token) {
     try {
       const payload = await verify(token, c.env.JWT_SECRET, 'HS256');
       if (payload && payload.id) {
-        // Ambil data user dari tabel 'users' berdasarkan ID dari JWT
         const user = await c.env.DB.prepare(
           'SELECT name, address FROM users WHERE id = ?'
         ).bind(payload.id).first<any>();
@@ -29,7 +27,6 @@ export default createRoute(async (c) => {
         }
       }
     } catch (e) {
-      // Jika token invalid/kedaluwarsa, biarkan sebagai guest (Guest Mode)
       console.log("Token user invalid atau tidak ada");
     }
   }
@@ -37,25 +34,28 @@ export default createRoute(async (c) => {
   // ==========================================
   // 2. TARIK DATA DARI DATABASE (Katalog, Menu, dan Promo Banner)
   // ==========================================
-  // Ambil Kategori Dinamis: Limit 12 agar pas untuk 2 baris x 6 kolom
   const { results: categories } = await c.env.DB.prepare(
     'SELECT id, name, image FROM menu_categories WHERE is_active = 1 ORDER BY sort_order ASC LIMIT 12'
   ).all();
 
+  // Tarik data menu dengan tambahan field `is_custom` dan `custom_options`
   const { results: promoItems } = await c.env.DB.prepare(
-    'SELECT * FROM menu_items WHERE is_available = 1 AND is_promo = 1 ORDER BY created_at DESC LIMIT 6'
+    'SELECT id, name, description, price, promo_price, is_promo, image, stock, is_available, is_custom, custom_options FROM menu_items WHERE is_available = 1 AND is_promo = 1 ORDER BY created_at DESC LIMIT 6'
   ).all();
 
   const { results: recommendedItems } = await c.env.DB.prepare(
-    'SELECT * FROM menu_items WHERE is_available = 1 AND is_promo = 0 ORDER BY created_at DESC LIMIT 10'
+    'SELECT id, name, description, price, promo_price, is_promo, image, stock, is_available, is_custom, custom_options FROM menu_items WHERE is_available = 1 AND is_promo = 0 ORDER BY created_at DESC LIMIT 10'
   ).all();
 
-  // Tarik data Banner Promo Dinamis dari tabel app_promos
   const { results: appPromos } = await c.env.DB.prepare(
     'SELECT image, action_url FROM app_promos WHERE is_active = 1 ORDER BY created_at DESC'
   ).all();
 
   const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
+
+  // Serialisasi data produk untuk dipakai oleh script JS di client-side
+  const allProductsData = [...promoItems, ...recommendedItems];
+  const safeItemsJson = JSON.stringify(allProductsData).replace(/</g, '\\u003c');
 
   return c.render(
     <div class="bg-gray-100 min-h-screen font-sans">
@@ -71,8 +71,6 @@ export default createRoute(async (c) => {
         {/* HEADER & SEARCH BAR */}
         <div class="bg-gradient-to-b from-[#ee4d2d] to-[#ff7337] px-4 pt-6 pb-4 rounded-b-2xl shadow-sm text-white">
           <div class="flex justify-between items-center mb-4">
-            
-            {/* WIDGET LOKASI DINAMIS */}
             <div class="max-w-[80%] cursor-pointer group" onclick="promptManualLocation()">
               <p class="text-[10px] font-medium opacity-90 uppercase tracking-wider mb-0.5">
                 {isUserLoggedIn ? `Hai, ${userName.split(' ')[0]}! Diantar ke` : 'Diantar ke'}
@@ -81,7 +79,6 @@ export default createRoute(async (c) => {
                 <div class="w-32 h-4 bg-white/20 rounded animate-pulse"></div>
               </h2>
             </div>
-            
             <button class="bg-white/20 hover:bg-white/30 p-2 rounded-full backdrop-blur-sm transition flex-shrink-0">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
             </button>
@@ -98,7 +95,7 @@ export default createRoute(async (c) => {
         {/* KONTEN UTAMA */}
         <div class="w-full">
           
-          {/* BANNER PROMO (Dinamis dari app_promos) */}
+          {/* BANNER PROMO */}
           {appPromos.length > 0 && (
             <div class="px-4 mt-4">
               <div class="flex overflow-x-auto snap-x snap-mandatory gap-3 hide-scrollbar pb-2">
@@ -111,7 +108,7 @@ export default createRoute(async (c) => {
             </div>
           )}
 
-          {/* KATEGORI GRID (6 Kolom per Baris) */}
+          {/* KATEGORI GRID (6 Kolom) */}
           <div class="px-4 mt-4">
             <div class="grid grid-cols-6 gap-y-4 gap-x-1 sm:gap-x-2">
               {categories.length > 0 ? categories.map((cat: any) => (
@@ -129,7 +126,7 @@ export default createRoute(async (c) => {
 
           <div class="h-2 bg-gray-100 mt-6 w-full"></div>
 
-          {/* Flash Sale / Promo */}
+          {/* FLASH SALE / PROMO ITEMS */}
           {promoItems.length > 0 && (
             <div class="mt-4">
               <div class="px-4 flex justify-between items-center mb-3">
@@ -149,7 +146,8 @@ export default createRoute(async (c) => {
                     <div class="snap-start shrink-0 w-36 bg-white rounded-xl shadow-sm border border-gray-100 relative flex flex-col overflow-hidden group">
                       <div class="absolute top-0 left-0 bg-[#ee4d2d] text-white text-[10px] font-black px-2 py-0.5 rounded-br-lg z-10 shadow-sm">{discountPercent}% OFF</div>
                       
-                      <div class="relative h-32 w-full bg-gray-50 overflow-hidden">
+                      {/* Buka Popup Saat Gambar Diklik */}
+                      <div class="relative h-32 w-full bg-gray-50 overflow-hidden cursor-pointer" onclick={`openProductDetail('${item.id}')`}>
                         <img src={item.image || 'https://via.placeholder.com/150'} class={`w-full h-full object-cover transition-transform ${isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-105'}`} />
                         {isOutOfStock && (
                           <div class="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center">
@@ -160,7 +158,7 @@ export default createRoute(async (c) => {
                       
                       <div class="p-2.5 flex flex-col flex-1 justify-between">
                         <div>
-                          <h4 class="text-xs font-bold text-gray-800 line-clamp-2 leading-snug">{item.name}</h4>
+                          <h4 class="text-xs font-bold text-gray-800 line-clamp-2 leading-snug cursor-pointer" onclick={`openProductDetail('${item.id}')`}>{item.name}</h4>
                           <div class="mt-1.5 flex flex-col">
                             <span class="text-[10px] text-gray-400 line-through decoration-gray-400">{formatter.format(item.price)}</span>
                             <span class="text-sm font-black text-[#ee4d2d] leading-none mt-0.5">{formatter.format(item.promo_price)}</span>
@@ -168,9 +166,17 @@ export default createRoute(async (c) => {
                         </div>
                         <div class="mt-3 flex justify-between items-center">
                           <span class="text-[9px] font-medium text-gray-500">Stok: {item.stock}</span>
-                          <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.promo_price})` : undefined} disabled={isOutOfStock} class={`w-6 h-6 rounded-full flex items-center justify-center transition ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
-                          </button>
+                          
+                          {/* Logika Tombol Custom vs Reguler */}
+                          {item.is_custom === 1 ? (
+                            <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[10px] font-bold px-3 py-1.5 rounded-full transition-colors ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
+                              Pilih
+                            </button>
+                          ) : (
+                            <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.promo_price})` : undefined} disabled={isOutOfStock} class={`w-6 h-6 rounded-full flex items-center justify-center transition ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
+                              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -182,7 +188,7 @@ export default createRoute(async (c) => {
 
           {promoItems.length > 0 && <div class="h-2 bg-gray-100 w-full"></div>}
 
-          {/* Rekomendasi Terlaris */}
+          {/* REKOMENDASI ITEM TERLARIS */}
           <div class="mt-4 pb-8">
             <div class="px-4 flex justify-between items-center mb-3">
               <h3 class="text-base font-black text-gray-800">Rekomendasi Untukmu</h3>
@@ -192,7 +198,7 @@ export default createRoute(async (c) => {
                 const isOutOfStock = item.stock === 0;
                 return (
                   <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden group">
-                    <div class="relative h-32 w-full bg-gray-50 overflow-hidden">
+                    <div class="relative h-32 w-full bg-gray-50 overflow-hidden cursor-pointer" onclick={`openProductDetail('${item.id}')`}>
                       <img src={item.image || 'https://via.placeholder.com/150'} class={`w-full h-full object-cover transition-transform ${isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-105'}`} />
                       {isOutOfStock && (
                         <div class="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center">
@@ -203,14 +209,21 @@ export default createRoute(async (c) => {
                     
                     <div class="p-3 flex flex-col flex-1 justify-between">
                       <div>
-                        <h4 class="text-xs font-bold text-gray-800 line-clamp-2 leading-snug mb-1">{item.name}</h4>
+                        <h4 class="text-xs font-bold text-gray-800 line-clamp-2 leading-snug mb-1 cursor-pointer" onclick={`openProductDetail('${item.id}')`}>{item.name}</h4>
                         <span class="text-sm font-black text-gray-900">{formatter.format(item.price)}</span>
                       </div>
                       <div class="mt-3 flex justify-between items-end">
                         <span class="text-[9px] font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">Stok: {item.stock}</span>
-                        <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price})` : undefined} disabled={isOutOfStock} class={`w-7 h-7 rounded-full flex items-center justify-center shadow-sm transition ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#ee4d2d] text-white hover:bg-orange-700'}`}>
-                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
-                        </button>
+                        
+                        {item.is_custom === 1 ? (
+                          <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm transition ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#ee4d2d] text-white hover:bg-orange-700'}`}>
+                            Pilih
+                          </button>
+                        ) : (
+                          <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price})` : undefined} disabled={isOutOfStock} class={`w-7 h-7 rounded-full flex items-center justify-center shadow-sm transition ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#ee4d2d] text-white hover:bg-orange-700'}`}>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -220,8 +233,48 @@ export default createRoute(async (c) => {
           </div>
         </div>
 
+        {/* =========================================================
+            MODAL BOTTOM SHEET DETAIL PRODUK & OPSI CUSTOM MENU
+            ========================================================= */}
+        <div id="product-detail-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] hidden flex flex-col justify-end opacity-0 transition-opacity duration-300">
+          <div class="bg-white w-full max-w-md mx-auto rounded-t-3xl max-h-[85vh] flex flex-col transform translate-y-full transition-transform duration-300" id="pdm-inner">
+            
+            <div class="relative h-56 bg-gray-100 rounded-t-3xl flex-shrink-0">
+              <img id="pdm-image" src="" class="w-full h-full object-cover rounded-t-3xl" />
+              <button onclick="closeProductDetail()" class="absolute top-4 right-4 w-8 h-8 bg-black/40 text-white rounded-full flex items-center justify-center backdrop-blur-md">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
+            </div>
+
+            <div class="p-5 overflow-y-auto flex-1 hide-scrollbar">
+              <h2 id="pdm-name" class="text-xl font-black text-gray-800 leading-tight"></h2>
+              <p id="pdm-desc" class="text-sm text-gray-500 mt-2 line-clamp-3"></p>
+              <div class="mt-3 flex items-center gap-2">
+                 <span id="pdm-price" class="text-lg font-black text-[#ee4d2d]"></span>
+                 <span id="pdm-original-price" class="text-xs font-bold text-gray-400 line-through hidden"></span>
+              </div>
+
+              {/* Tempat Injeksi Opsi Custom HTML (Radio/Checkbox dari JSON) */}
+              <div id="pdm-custom-container" class="mt-6 space-y-5 border-t border-gray-100 pt-5"></div>
+            </div>
+
+            <div class="p-4 border-t border-gray-100 bg-white flex items-center gap-4 flex-shrink-0 pb-safe">
+              <div class="flex items-center bg-gray-100 rounded-xl px-1">
+                <button onclick="updateQty(-1)" class="w-10 h-10 flex items-center justify-center text-gray-600 font-black text-lg">-</button>
+                <span id="pdm-qty" class="w-6 text-center font-black">1</span>
+                <button onclick="updateQty(1)" class="w-10 h-10 flex items-center justify-center text-[#ee4d2d] font-black text-lg">+</button>
+              </div>
+              <button id="pdm-add-btn" class="flex-1 bg-[#ee4d2d] text-white py-3.5 rounded-xl font-bold shadow-md shadow-orange-500/30 active:scale-95 transition-transform flex items-center justify-center gap-2" onclick="submitProductToCart()">
+                <span>Tambah</span>
+                <span class="w-1 h-1 rounded-full bg-white/50"></span>
+                <span id="pdm-total-btn-price"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* BOTTOM NAVIGATION BAR (FIXED) */}
-        <div class="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white border-t border-gray-200 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.08)] z-40">
+        <div class="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white border-t border-gray-200 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.08)] z-[40]">
           <div class="flex justify-around items-center h-[60px] px-2 pb-safe">
             <a href="/users" class="flex flex-col items-center gap-1 text-[#ee4d2d]">
               <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg>
@@ -268,35 +321,38 @@ export default createRoute(async (c) => {
         </div>
       </div>
 
-      {/* SCRIPT INTERAKTIF (LOKASI GPS, MODAL & KERANJANG) */}
+      {/* SCRIPT INTERAKTIF */}
       <script dangerouslySetInnerHTML={{ __html: `
-        // Data alamat dari sisi server (Database Users) yang disuntikkan ke JavaScript
         const DB_ADDRESS = \`${userAddress}\`;
+        const PRODUCTS = ${safeItemsJson};
+        const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
         
-        // --- LOGIKA LOKASI (DB -> LocalStorage -> GPS) ---
+        let cartItems = 0;
+        let cartTotal = 0;
+        
+        let currentActiveProduct = null;
+        let currentQty = 1;
+        let basePrice = 0;
+        let additionalPrice = 0;
+        
+        // --- LOGIKA LOKASI (Tetap sama) ---
         function initLocation() {
           const locElement = document.getElementById('user-location');
           const arrowIcon = '<svg class="w-4 h-4 ml-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>';
           
-          // 1. Cek Database: Jika user login dan punya alamat di profilnya
           if (DB_ADDRESS && DB_ADDRESS.trim() !== '') {
             locElement.innerHTML = \`<span class="truncate">\${DB_ADDRESS}</span> \${arrowIcon}\`;
             return;
           }
-
-          // 2. Cek Cache LocalStorage (Bagi Guest atau yang belum isi alamat di DB)
           const savedAddress = localStorage.getItem('user_saved_address');
           if (savedAddress) {
             locElement.innerHTML = \`<span class="truncate">\${savedAddress}</span> \${arrowIcon}\`;
             return;
           }
-
           locElement.innerHTML = '<span class="truncate">Mendeteksi lokasi...</span> <svg class="animate-spin w-4 h-4 ml-1 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
-
-          // 3. Minta akses GPS jika semuanya kosong
+          
           if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
-              async (position) => {
+            navigator.geolocation.getCurrentPosition(async (position) => {
                 const lat = position.coords.latitude;
                 const lon = position.coords.longitude;
                 try {
@@ -311,60 +367,39 @@ export default createRoute(async (c) => {
                 } catch(e) {
                   locElement.innerHTML = \`<span class="truncate">Gagal melacak, ketuk untuk isi</span> \${arrowIcon}\`;
                 }
-              }, 
-              (error) => {
+              }, () => {
                 locElement.innerHTML = \`<span class="truncate text-yellow-100">Ketuk untuk set alamat manual</span> \${arrowIcon}\`;
-              }
-            );
+              });
           } else {
             locElement.innerHTML = \`<span class="truncate">Pilih lokasi pengiriman</span> \${arrowIcon}\`;
           }
         }
 
-        // --- KONTROL MODAL ALAMAT ---
         function promptManualLocation() {
           const modal = document.getElementById('location-modal');
           const inner = document.getElementById('location-modal-inner');
           const input = document.getElementById('manual-address-input');
-          
-          // Isi default value dari DB atau LocalStorage saat modal dibuka
           const currentAddress = localStorage.getItem('user_saved_address') || '';
-          if (DB_ADDRESS && DB_ADDRESS.trim() !== '') {
-            input.value = DB_ADDRESS;
-          } else {
-            input.value = currentAddress;
-          }
-
+          input.value = (DB_ADDRESS && DB_ADDRESS.trim() !== '') ? DB_ADDRESS : currentAddress;
           modal.classList.remove('hidden');
-          setTimeout(() => {
-            modal.classList.remove('opacity-0');
-            inner.classList.remove('scale-95');
-          }, 10);
+          setTimeout(() => { modal.classList.remove('opacity-0'); inner.classList.remove('scale-95'); }, 10);
         }
 
         function closeLocationModal() {
           const modal = document.getElementById('location-modal');
           const inner = document.getElementById('location-modal-inner');
-          
           modal.classList.add('opacity-0');
           inner.classList.add('scale-95');
-          setTimeout(() => {
-            modal.classList.add('hidden');
-          }, 300);
+          setTimeout(() => modal.classList.add('hidden'), 300);
         }
 
         function saveManualLocation() {
           const val = document.getElementById('manual-address-input').value;
           if (val && val.trim() !== '') {
-            // Simpan ke sesi lokal
             localStorage.setItem('user_saved_address', val);
-            
-            // Perbarui UI
             document.getElementById('user-location').innerHTML = \`<span class="truncate">\${val}</span> <svg class="w-4 h-4 ml-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>\`;
-            
             closeLocationModal();
           } else {
-            // Fallback animasi getar sederhana jika input kosong
             const inner = document.getElementById('location-modal-inner');
             inner.style.transform = 'translateX(5px)';
             setTimeout(() => inner.style.transform = 'translateX(-5px)', 50);
@@ -373,34 +408,126 @@ export default createRoute(async (c) => {
           }
         }
 
-        // --- KERANJANG BELANJA ---
-        let cartItems = 0;
+        // --- LOGIKA KERANJANG STANDAR ---
         function addToCart(id, name, price) {
           cartItems += 1;
           const badge = document.getElementById('nav-cart-badge');
           badge.innerText = cartItems;
           badge.classList.remove('hidden');
-          
-          // Efek pop pada badge cart
           badge.style.transform = 'scale(1.4)';
           setTimeout(() => badge.style.transform = 'scale(1)', 200);
 
-          // Toast Notifikasi
+          showToast(name + ' masuk keranjang!');
+        }
+
+        function showToast(msg) {
           const toast = document.createElement('div');
           toast.className = 'fixed bottom-24 left-1/2 transform -translate-x-1/2 bg-gray-900/90 backdrop-blur-sm border border-gray-800 text-white text-[11px] font-bold px-5 py-3 rounded-full shadow-2xl z-[100] flex items-center gap-2 transition-all duration-300 opacity-0 translate-y-4';
-          toast.innerHTML = '<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg> ' + name + ' masuk keranjang!';
+          toast.innerHTML = '<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg> ' + msg;
           document.body.appendChild(toast);
+          setTimeout(() => toast.classList.remove('opacity-0', 'translate-y-4'), 10);
+          setTimeout(() => { toast.classList.add('opacity-0', 'translate-y-4'); setTimeout(() => toast.remove(), 300); }, 2000);
+        }
+
+        // --- LOGIKA MODAL DETAIL PRODUK & KUSTOMISASI JSON ---
+        function openProductDetail(id) {
+          const item = PRODUCTS.find(p => p.id === id);
+          if(!item) return;
+
+          currentActiveProduct = item;
+          currentQty = 1;
+          document.getElementById('pdm-qty').innerText = currentQty;
+
+          document.getElementById('pdm-image').src = item.image || 'https://via.placeholder.com/400';
+          document.getElementById('pdm-name').innerText = item.name;
+          document.getElementById('pdm-desc').innerText = item.description || '';
           
+          basePrice = item.is_promo === 1 ? item.promo_price : item.price;
+          document.getElementById('pdm-price').innerText = formatter.format(basePrice);
+          
+          const orig = document.getElementById('pdm-original-price');
+          if(item.is_promo === 1) {
+             orig.innerText = formatter.format(item.price);
+             orig.classList.remove('hidden');
+          } else {
+             orig.classList.add('hidden');
+          }
+
+          // Build UI untuk opsi kustomisasi (Parse JSON dari DB)
+          const container = document.getElementById('pdm-custom-container');
+          container.innerHTML = '';
+          additionalPrice = 0;
+
+          if(item.is_custom === 1 && item.custom_options) {
+             try {
+                const options = JSON.parse(item.custom_options);
+                options.forEach((optGroup, groupIdx) => {
+                   let html = \`<div class="mb-4">
+                       <div class="flex justify-between items-baseline mb-3">
+                         <h4 class="font-black text-gray-800 text-sm">\${optGroup.title}</h4>
+                         \${optGroup.required ? '<span class="text-[9px] font-bold bg-[#ee4d2d]/10 text-[#ee4d2d] px-1.5 py-0.5 rounded">Wajib</span>' : '<span class="text-[9px] font-medium text-gray-400">Opsional</span>'}
+                       </div>\`;
+
+                   optGroup.options.forEach((opt, optIdx) => {
+                     const inputType = optGroup.type === 'radio' ? 'radio' : 'checkbox';
+                     const inputName = \`custom_\${groupIdx}\`;
+                     const priceText = opt.price > 0 ? \`+ \${formatter.format(opt.price)}\` : 'Gratis';
+                     
+                     html += \`<label class="flex items-center justify-between p-3 border border-gray-100 rounded-xl mb-2 cursor-pointer hover:bg-gray-50 transition-colors">
+                         <div class="flex items-center gap-3">
+                           <input type="\${inputType}" name="\${inputName}" value="\${opt.price}" class="w-4 h-4 text-[#ee4d2d] focus:ring-[#ee4d2d] border-gray-300 \${inputType==='radio'?'rounded-full':'rounded'}" onchange="recalculateModalPrice()">
+                           <span class="text-sm font-semibold text-gray-700">\${opt.name}</span>
+                         </div>
+                         <span class="text-xs font-bold text-gray-500">\${priceText}</span>
+                       </label>\`;
+                   });
+                   html += '</div>';
+                   container.innerHTML += html;
+                });
+             } catch(e) {
+                console.error("Gagal parsing custom JSON", e);
+             }
+          }
+
+          recalculateModalPrice();
+
+          const modal = document.getElementById('product-detail-modal');
+          const inner = document.getElementById('pdm-inner');
+          modal.classList.remove('hidden');
           setTimeout(() => {
-            toast.classList.remove('opacity-0', 'translate-y-4');
-            toast.classList.add('opacity-100', 'translate-y-0');
+            modal.classList.remove('opacity-0');
+            inner.classList.remove('translate-y-full');
           }, 10);
-          
-          setTimeout(() => {
-            toast.classList.remove('opacity-100', 'translate-y-0');
-            toast.classList.add('opacity-0', 'translate-y-4');
-            setTimeout(() => toast.remove(), 300);
-          }, 2000);
+        }
+
+        function closeProductDetail() {
+          const modal = document.getElementById('product-detail-modal');
+          const inner = document.getElementById('pdm-inner');
+          modal.classList.add('opacity-0');
+          inner.classList.add('translate-y-full');
+          setTimeout(() => modal.classList.add('hidden'), 300);
+        }
+
+        function updateQty(delta) {
+          if(currentQty + delta >= 1) {
+            currentQty += delta;
+            document.getElementById('pdm-qty').innerText = currentQty;
+            recalculateModalPrice();
+          }
+        }
+
+        function recalculateModalPrice() {
+           additionalPrice = 0;
+           const inputs = document.querySelectorAll('#pdm-custom-container input:checked');
+           inputs.forEach(input => { additionalPrice += parseInt(input.value) || 0; });
+           const total = (basePrice + additionalPrice) * currentQty;
+           document.getElementById('pdm-total-btn-price').innerText = formatter.format(total);
+        }
+
+        function submitProductToCart() {
+           const finalPrice = (basePrice + additionalPrice) * currentQty;
+           addToCart(currentActiveProduct.id, currentActiveProduct.name, finalPrice);
+           closeProductDetail();
         }
 
         document.addEventListener('DOMContentLoaded', initLocation);
