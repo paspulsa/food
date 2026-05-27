@@ -137,7 +137,7 @@ export default createRoute(async (c) => {
             <div class="grid grid-cols-6 gap-y-4 gap-x-1 sm:gap-x-2">
               {categories.length > 0 ? categories.map((cat: any) => (
                 <div class="flex flex-col items-center gap-1.5 cursor-pointer group relative z-10 hover:z-50" onclick={`showCategory('${cat.id}', '${cat.name.replace(/'/g, "\\'")}')`}>
-                  <div class="w-[46px] h-[46px] sm:w-[50px] sm:h-[50px] bg-white dark:bg-gray-700 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-600 flex items-center justify-center p-1.5 transition-all duration-300 transform group-hover:scale-125 group-hover:shadow-xl group-hover:bg-orange-50 dark:group-hover:bg-gray-600 overflow-hidden">
+                  <div class="w-[46px] h-[46px] sm:w-[50px] sm:h-[50px] bg-white dark:bg-gray-700 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-600 flex items-center justify-center p-1.5 transition-all duration-300 transform group-hover:scale-200 group-hover:shadow-xl group-hover:bg-orange-50 dark:group-hover:bg-gray-600 overflow-hidden">
                     <img src={cat.image || `https://ui-avatars.com/api/?name=${cat.name}&background=ee4d2d&color=fff`} class="w-full h-full object-contain" alt={cat.name} />
                   </div>
                   <span class="text-[9px] text-center font-bold text-gray-700 dark:text-gray-300 leading-tight line-clamp-2 px-0.5 group-hover:text-[#ee4d2d] transition-colors">{cat.name}</span>
