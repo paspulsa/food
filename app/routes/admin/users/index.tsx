@@ -83,9 +83,9 @@ export default createRoute(async (c) => {
       <div class="max-w-md mx-auto bg-gray-50 dark:bg-gray-800 min-h-screen relative shadow-2xl pb-24 overflow-x-hidden transition-colors duration-300">
         
         {/* =========================================================
-            HEADER & SEARCH BAR
+            HEADER & SEARCH BAR (DENGAN LIVE SEARCH)
             ========================================================= */}
-        <div class="bg-gradient-to-b from-[#ee4d2d] to-[#ff7337] px-4 pt-6 pb-4 rounded-b-2xl shadow-sm text-white">
+        <div class="bg-gradient-to-b from-[#ee4d2d] to-[#ff7337] px-4 pt-6 pb-4 rounded-b-2xl shadow-sm text-white relative z-50">
           <div class="flex justify-between items-center mb-4">
             <div class="max-w-[80%] cursor-pointer group" onclick="promptManualLocation()">
               <p class="text-[10px] font-medium opacity-90 uppercase tracking-wider mb-0.5">
@@ -100,11 +100,16 @@ export default createRoute(async (c) => {
             </button>
           </div>
           
-          <div class="relative">
+          <div class="relative z-[60]">
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             </div>
-            <input type="text" class="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-700 rounded-xl text-sm text-gray-900 dark:text-white shadow-inner focus:outline-none focus:ring-2 focus:ring-white/50 placeholder-gray-400 dark:placeholder-gray-300" placeholder="Cari menu, promo, atau resto..." />
+            <input type="text" id="search-input" class="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-700 rounded-xl text-sm text-gray-900 dark:text-white shadow-inner focus:outline-none focus:ring-2 focus:ring-white/50 placeholder-gray-400 dark:placeholder-gray-300" placeholder="Cari menu, promo, atau resto..." autocomplete="off" onkeyup="handleSearch(this.value)" onfocus="handleSearch(this.value)" />
+            
+            {/* DROPDOWN LIVE SEARCH */}
+            <div id="search-results" class="absolute left-0 right-0 top-full mt-2 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-100 dark:border-gray-700 overflow-hidden hidden max-h-72 overflow-y-auto z-[70]">
+               {/* Konten akan di-inject lewat JS */}
+            </div>
           </div>
         </div>
 
@@ -126,13 +131,13 @@ export default createRoute(async (c) => {
           )}
 
           {/* =========================================================
-              KATEGORI GRID (6 Kolom per Baris)
+              KATEGORI GRID (DENGAN EFEK HOVER ZOOM ELEGAN Z-INDEX)
               ========================================================= */}
           <div class="px-4 mt-4">
             <div class="grid grid-cols-6 gap-y-4 gap-x-1 sm:gap-x-2">
               {categories.length > 0 ? categories.map((cat: any) => (
-                <div class="flex flex-col items-center gap-1.5 cursor-pointer group relative" onclick={`showCategory('${cat.id}', '${cat.name.replace(/'/g, "\\'")}')`}>
-                  <div class="w-[46px] h-[46px] sm:w-[50px] sm:h-[50px] bg-white dark:bg-gray-700 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-600 flex items-center justify-center p-1.5 transition-all duration-300 transform group-hover:scale-110 group-hover:-translate-y-1 group-hover:shadow-md group-hover:bg-orange-50 dark:group-hover:bg-gray-600 overflow-hidden z-10">
+                <div class="flex flex-col items-center gap-1.5 cursor-pointer group relative z-10 hover:z-50" onclick={`showCategory('${cat.id}', '${cat.name.replace(/'/g, "\\'")}')`}>
+                  <div class="w-[46px] h-[46px] sm:w-[50px] sm:h-[50px] bg-white dark:bg-gray-700 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-600 flex items-center justify-center p-1.5 transition-all duration-300 transform group-hover:scale-175 group-hover:shadow-xl group-hover:bg-orange-50 dark:group-hover:bg-gray-600 overflow-hidden">
                     <img src={cat.image || `https://ui-avatars.com/api/?name=${cat.name}&background=ee4d2d&color=fff`} class="w-full h-full object-contain" alt={cat.name} />
                   </div>
                   <span class="text-[9px] text-center font-bold text-gray-700 dark:text-gray-300 leading-tight line-clamp-2 px-0.5 group-hover:text-[#ee4d2d] transition-colors">{cat.name}</span>
@@ -600,7 +605,53 @@ export default createRoute(async (c) => {
           setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
         }
 
-        // --- 4. FILTER KATEGORI IN-PLACE (Ganti Grid Rekomendasi) ---
+        // --- 4. LIVE SEARCH & OUTSIDE CLICK ---
+        function handleSearch(query) {
+          const resultsContainer = document.getElementById('search-results');
+          
+          if (!query || query.length < 3) {
+            resultsContainer.classList.add('hidden');
+            return;
+          }
+
+          const lowerQuery = query.toLowerCase();
+          const filtered = PRODUCTS.filter(p => p.name.toLowerCase().includes(lowerQuery));
+
+          if (filtered.length === 0) {
+            resultsContainer.innerHTML = '<div class="p-4 text-center text-xs text-gray-500 font-medium">Menu tidak ditemukan.</div>';
+          } else {
+            resultsContainer.innerHTML = filtered.map(item => {
+              const currentPrice = item.is_promo ? item.promo_price : item.price;
+              const isOutOfStock = item.stock === 0;
+              
+              return \`
+                <div class="flex items-center gap-3 p-3 border-b border-gray-50 dark:border-gray-700/50 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors" onclick="\${!isOutOfStock ? \`openProductDetail('\${item.id}'); document.getElementById('search-results').classList.add('hidden');\` : ''}">
+                  <div class="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-700 flex-shrink-0 overflow-hidden relative border border-gray-200 dark:border-gray-600">
+                    <img src="\${item.image || 'https://via.placeholder.com/150'}" class="w-full h-full object-cover \${isOutOfStock ? 'opacity-50 grayscale' : ''}" alt="\${item.name}" />
+                    \${isOutOfStock ? '<div class="absolute inset-0 bg-white/40 dark:bg-black/40 backdrop-blur-[1px] flex items-center justify-center"><span class="text-[8px] font-black text-white bg-gray-900 px-1 py-0.5 rounded">HABIS</span></div>' : ''}
+                  </div>
+                  <div class="flex-1 overflow-hidden">
+                    <h4 class="text-sm font-bold text-gray-900 dark:text-white line-clamp-1">\${item.name}</h4>
+                    <span class="text-xs font-black text-[#ee4d2d] mt-0.5 block">\${formatter.format(currentPrice)}</span>
+                  </div>
+                </div>
+              \`;
+            }).join('');
+          }
+          
+          resultsContainer.classList.remove('hidden');
+        }
+
+        // Menutup dropdown search jika mengklik area luar
+        document.addEventListener('click', (e) => {
+          const searchInput = document.getElementById('search-input');
+          const searchResults = document.getElementById('search-results');
+          if (searchInput && searchResults && !searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+            searchResults.classList.add('hidden');
+          }
+        });
+
+        // --- 5. FILTER KATEGORI IN-PLACE (Ganti Grid Rekomendasi) ---
         function showCategory(categoryId, categoryName) {
           const container = document.getElementById('dynamic-category-container');
           const titleName = document.getElementById('dynamic-category-name');
@@ -647,7 +698,7 @@ export default createRoute(async (c) => {
           setTimeout(() => { container.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
         }
 
-        // --- 5. LOGIKA KERANJANG STANDAR ---
+        // --- 6. LOGIKA KERANJANG STANDAR ---
         function addToCart(id, name, price) {
           cartItems += 1;
           cartTotal += price;
@@ -660,7 +711,7 @@ export default createRoute(async (c) => {
           showToast(name + ' ditambahkan ke keranjang');
         }
 
-        // --- 6. LOGIKA MODAL BOTTOM SHEET DETAIL PRODUK & KUSTOMISASI (SPOILER) ---
+        // --- 7. LOGIKA MODAL BOTTOM SHEET DETAIL PRODUK & KUSTOMISASI (SPOILER) ---
         function openProductDetail(id) {
           const item = PRODUCTS.find(p => p.id === id);
           if(!item) return;
