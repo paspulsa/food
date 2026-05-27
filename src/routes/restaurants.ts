@@ -3,7 +3,7 @@ import { Bindings, Variables } from '../types';
 
 export const restaurantRouter = new Hono<{ Bindings: Bindings, Variables: Variables }>();
 
-// GET ALL (Akses Publik / Frontend)
+// GET ALL (Mendukung Pagination & Search)
 restaurantRouter.get('/', async (c) => {
   try {
     const { current = '1', pageSize = '10', name = '' } = c.req.query();
@@ -35,7 +35,7 @@ restaurantRouter.get('/', async (c) => {
   }
 });
 
-// GET DETAIL BY ID (Akses Publik)
+// GET DETAIL BY ID
 restaurantRouter.get('/:id', async (c) => {
   try {
     const id = c.req.param('id');
@@ -52,7 +52,7 @@ restaurantRouter.get('/:id', async (c) => {
   }
 });
 
-// CREATE NEW RESTAURANT (Hanya Admin Terotentikasi)
+// CREATE NEW RESTAURANT (Multi-Tenant Ready + Theme Integration)
 restaurantRouter.post('/', async (c) => {
   const payload = c.get('jwtPayload');
   if (!payload) return c.json({ success: false, message: 'Akses ditolak. Otorisasi JWT tidak ditemukan.' }, 401);
@@ -63,16 +63,27 @@ restaurantRouter.post('/', async (c) => {
     
     const isActiveInt = body.isActive === false ? 0 : 1; 
     const rating = body.rating || 0.0;
-
-    // Injeksi Sistem Multi-Tenant
+    
+    // Multi-Tenant & Theme Configuration
     const tenant_code = body.tenant_code || `TN-${crypto.randomUUID().substring(0,6).toUpperCase()}`;
-    const owner_id = body.owner_id || payload.id; // Menautkan gerai ke akun admin yang membuat
+    const owner_id = body.owner_id || payload.id;
+    const theme_color = body.theme_color || '#f97316'; 
 
     await c.env.DB.prepare(
-      `INSERT INTO restaurants (id, name, address, phone, email, image, rating, isActive, tenant_code, owner_id) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO restaurants (id, name, address, phone, email, image, rating, isActive, tenant_code, owner_id, theme_color) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
-      id, body.name, body.address, body.phone || null, body.email || null, body.image || null, rating, isActiveInt, tenant_code, owner_id
+      id, 
+      body.name, 
+      body.address, 
+      body.phone || null, 
+      body.email || null, 
+      body.image || null, 
+      rating, 
+      isActiveInt, 
+      tenant_code, 
+      owner_id,
+      theme_color
     ).run();
 
     return c.json({ success: true, message: 'Restoran berhasil didaftarkan', data: { id, tenant_code } }, 201);
@@ -84,7 +95,7 @@ restaurantRouter.post('/', async (c) => {
   }
 });
 
-// UPDATE RESTAURANT (Hanya Admin Terotentikasi)
+// UPDATE RESTAURANT
 restaurantRouter.put('/:id', async (c) => {
   const payload = c.get('jwtPayload');
   if (!payload) return c.json({ success: false, message: 'Akses ditolak.' }, 401);
@@ -92,14 +103,24 @@ restaurantRouter.put('/:id', async (c) => {
   try {
     const id = c.req.param('id');
     const body = await c.req.json();
+    
     const isActiveInt = body.isActive ? 1 : 0;
+    const theme_color = body.theme_color || '#f97316';
 
     const result = await c.env.DB.prepare(
       `UPDATE restaurants 
-       SET name = ?, address = ?, phone = ?, email = ?, image = ?, rating = ?, isActive = ?, updated_at = CURRENT_TIMESTAMP 
+       SET name = ?, address = ?, phone = ?, email = ?, image = ?, rating = ?, isActive = ?, theme_color = ?, updated_at = CURRENT_TIMESTAMP 
        WHERE id = ?`
     ).bind(
-      body.name, body.address, body.phone || null, body.email || null, body.image || null, body.rating || 0, isActiveInt, id
+      body.name, 
+      body.address, 
+      body.phone || null, 
+      body.email || null, 
+      body.image || null, 
+      body.rating || 0, 
+      isActiveInt, 
+      theme_color,
+      id
     ).run();
 
     if (result.meta.changes === 0) {
@@ -111,7 +132,7 @@ restaurantRouter.put('/:id', async (c) => {
   }
 });
 
-// DELETE RESTAURANT (Hanya Admin Terotentikasi)
+// DELETE RESTAURANT
 restaurantRouter.delete('/:id', async (c) => {
   const payload = c.get('jwtPayload');
   if (!payload) return c.json({ success: false, message: 'Akses ditolak.' }, 401);
