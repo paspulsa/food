@@ -29,6 +29,7 @@ export default createRoute(async (c) => {
           <thead>
             <tr class="bg-gray-50/70 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-100">
               <th class="px-6 py-4 font-semibold">Detail Informasi Gerai</th>
+              <th class="px-6 py-4 font-semibold">Kontak</th>
               <th class="px-6 py-4 font-semibold">Koordinat GPS</th>
               <th class="px-6 py-4 font-semibold">Identitas Visual (Tema)</th>
               <th class="px-6 py-4 font-semibold">Status Operasi</th>
@@ -38,7 +39,7 @@ export default createRoute(async (c) => {
           <tbody class="divide-y divide-gray-100 text-sm">
             {restaurants.length === 0 ? (
               <tr>
-                <td colspan="5" class="px-6 py-12 text-center text-gray-400 italic">
+                <td colspan="6" class="px-6 py-12 text-center text-gray-400 italic">
                   Belum ada mitra restoran yang terdaftar di basis data D1.
                 </td>
               </tr>
@@ -55,6 +56,10 @@ export default createRoute(async (c) => {
                     <div class="text-[10px] font-mono text-gray-400 mt-0.5" title={resto.id}>ID: {resto.id.substring(0, 8)}...</div>
                   </div>
                 </td>
+                <td class="px-6 py-4 text-xs text-gray-600 space-y-0.5">
+                  <div class="font-semibold">{resto.phone || '-'}</div>
+                  <div class="text-gray-400">{resto.email || '-'}</div>
+                </td>
                 <td class="px-6 py-4 font-mono text-xs text-gray-600">{resto.latitude || 0}, {resto.longitude || 0}</td>
                 <td class="px-6 py-4">
                   <div class="flex items-center gap-2">
@@ -67,7 +72,7 @@ export default createRoute(async (c) => {
                     {resto.isActive === 1 ? 'AKTIF' : 'NONAKTIF'}
                   </span>
                 </td>
-                <td class="px-6 py-4 text-right">
+                <td class="px-6 py-4 text-right whitespace-nowrap">
                   <button 
                     onclick={`openRestoModal('${resto.id}', '${resto.name.replace(/'/g, "\\'")}', '${resto.address.replace(/'/g, "\\'")}', '${resto.phone || ''}', '${resto.email || ''}', '${resto.image || ''}', ${resto.latitude || 0}, ${resto.longitude || 0}, '${resto.theme_color || '#E61010'}', ${resto.isActive})`}
                     class="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-100 transition-colors"
@@ -97,11 +102,24 @@ export default createRoute(async (c) => {
             </button>
           </div>
           
-          <form class="p-6 space-y-4" onsubmit="event.preventDefault(); submitRestaurant();">
+          <form class="p-6 space-y-4 max-h-[80vh] overflow-y-auto" onsubmit="event.preventDefault(); submitRestaurant();">
             <input type="hidden" id="resto_id" />
+            
             <div>
               <label class="block text-sm font-bold text-gray-700 mb-1">Nama Gerai Restoran</label>
               <input type="text" id="resto_name" placeholder="Contoh: ShopeeFood Kitchen Pusat" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm" required />
+            </div>
+
+            {/* FIELD BARU: TELEPON & EMAIL */}
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-bold text-gray-700 mb-1">Nomor Telepon</label>
+                <input type="text" id="resto_phone" placeholder="08123456789" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 outline-none text-sm" />
+              </div>
+              <div>
+                <label class="block text-sm font-bold text-gray-700 mb-1">Email Gerai</label>
+                <input type="email" id="resto_email" placeholder="resto@env.com" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 outline-none text-sm" />
+              </div>
             </div>
             
             <div class="grid grid-cols-2 gap-4">
@@ -115,11 +133,21 @@ export default createRoute(async (c) => {
               </div>
             </div>
 
-            <div class="p-4 bg-slate-50 rounded-xl border border-gray-200">
-              <label class="block text-xs font-black text-gray-700 uppercase tracking-wider mb-2">Tema Visual (White-Labeling)</label>
-              <div class="flex items-center gap-3">
-                <input type="color" id="resto_theme_color" class="w-12 h-10 rounded cursor-pointer border-0" value="#E61010" />
-                <span class="text-xs font-mono font-bold text-gray-600">Pilih palet warna tema gerai</span>
+            {/* FIELD BARU: STATUS OPERASIONAL & TEMA */}
+            <div class="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-xl border border-gray-200">
+              <div>
+                <label class="block text-xs font-black text-gray-700 uppercase tracking-wider mb-2">Status Operasi</label>
+                <select id="resto_is_active" class="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-primary/20">
+                  <option value="1">AKTiF</option>
+                  <option value="0">NONAKTIF</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-black text-gray-700 uppercase tracking-wider mb-2">Tema Warna</label>
+                <div class="flex items-center gap-2">
+                  <input type="color" id="resto_theme_color" class="w-10 h-8 rounded cursor-pointer border-0 p-0" value="#E61010" />
+                  <span class="text-[10px] text-gray-500 font-mono">Palet Warna</span>
+                </div>
               </div>
             </div>
 
@@ -136,7 +164,7 @@ export default createRoute(async (c) => {
             </div>
 
             <button type="submit" class="w-full bg-primary hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-md transition-colors mt-4">
-              Simpan & Daftarkan Gerai
+              Simpan Konfigurasi Gerai
             </button>
           </form>
         </div>
@@ -154,10 +182,12 @@ export default createRoute(async (c) => {
           document.getElementById('resto_name').value = name;
           document.getElementById('resto_address').value = address;
           document.getElementById('resto_phone').value = phone;
+          document.getElementById('resto_email').value = email;
           document.getElementById('resto_image').value = image;
           document.getElementById('resto_lat').value = lat;
           document.getElementById('resto_lng').value = lng;
           document.getElementById('resto_theme_color').value = theme;
+          document.getElementById('resto_is_active').value = isActive;
           
           const modal = document.getElementById('restoModal');
           const inner = document.getElementById('restoModalInner');
@@ -201,10 +231,10 @@ export default createRoute(async (c) => {
             phone: document.getElementById('resto_phone').value || null,
             email: document.getElementById('resto_email').value || null,
             image: document.getElementById('resto_image').value || null,
-            latitude: parseFloat(document.getElementById('resto_lat').value),
-            longitude: parseFloat(document.getElementById('resto_lng').value),
+            latitude: parseFloat(document.getElementById('resto_lat').value) || 0,
+            longitude: parseFloat(document.getElementById('resto_lng').value) || 0,
             theme_color: document.getElementById('resto_theme_color').value,
-            isActive: true
+            isActive: parseInt(document.getElementById('resto_is_active').value)
           };
 
           const method = id ? 'PUT' : 'POST';
