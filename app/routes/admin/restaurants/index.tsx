@@ -1,9 +1,9 @@
 import { createRoute } from 'honox/factory'
 
 export default createRoute(async (c) => {
-  // Ambil seluruh data gerai restoran asli dari basis data D1
+  // Ambil data termasuk open_time dan close_time dari D1
   const { results: restaurants } = await c.env.DB.prepare(
-    'SELECT id, name, address, phone, email, image, isActive, latitude, longitude, theme_color FROM restaurants ORDER BY created_at DESC LIMIT 100'
+    'SELECT id, name, address, phone, email, image, isActive, latitude, longitude, theme_color, open_time, close_time FROM restaurants ORDER BY created_at DESC LIMIT 100'
   ).all();
 
   return c.render(
@@ -12,7 +12,7 @@ export default createRoute(async (c) => {
       <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
         <div>
           <h2 class="text-2xl font-black text-gray-800 tracking-tight">Manajemen Mitra Restoran</h2>
-          <p class="text-gray-500 text-sm mt-1">Kelola lisensi operasional, koordinat GPS, dan identitas visual setiap gerai mitra.</p>
+          <p class="text-gray-500 text-sm mt-1">Kelola lisensi operasional, koordinat GPS, jam operasional, dan identitas visual setiap gerai mitra.</p>
         </div>
         <button 
           onclick="openRestoModal()"
@@ -30,16 +30,17 @@ export default createRoute(async (c) => {
             <tr class="bg-gray-50/70 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-100">
               <th class="px-6 py-4 font-semibold">Detail Informasi Gerai</th>
               <th class="px-6 py-4 font-semibold">Kontak</th>
+              <th class="px-6 py-4 font-semibold">Jam Operasional</th>
               <th class="px-6 py-4 font-semibold">Koordinat GPS</th>
-              <th class="px-6 py-4 font-semibold">Identitas Visual (Tema)</th>
-              <th class="px-6 py-4 font-semibold">Status Operasi</th>
+              <th class="px-6 py-4 font-semibold">Tema Warna</th>
+              <th class="px-6 py-4 font-semibold">Status</th>
               <th class="px-6 py-4 text-right font-semibold">Aksi Kontrol</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 text-sm">
             {restaurants.length === 0 ? (
               <tr>
-                <td colspan="6" class="px-6 py-12 text-center text-gray-400 italic">
+                <td colspan="7" class="px-6 py-12 text-center text-gray-400 italic">
                   Belum ada mitra restoran yang terdaftar di basis data D1.
                 </td>
               </tr>
@@ -60,6 +61,12 @@ export default createRoute(async (c) => {
                   <div class="font-semibold">{resto.phone || '-'}</div>
                   <div class="text-gray-400">{resto.email || '-'}</div>
                 </td>
+                {/* KOLOM BARU: JAM OPERASIONAL */}
+                <td class="px-6 py-4 font-mono text-xs text-slate-700">
+                  <span class="bg-slate-100 px-2 py-1 rounded border border-slate-200 block w-max font-bold">
+                    ⏱️ {resto.open_time || '08:00'} - {resto.close_time || '22:00'}
+                  </span>
+                </td>
                 <td class="px-6 py-4 font-mono text-xs text-gray-600">{resto.latitude || 0}, {resto.longitude || 0}</td>
                 <td class="px-6 py-4">
                   <div class="flex items-center gap-2">
@@ -74,7 +81,7 @@ export default createRoute(async (c) => {
                 </td>
                 <td class="px-6 py-4 text-right whitespace-nowrap">
                   <button 
-                    onclick={`openRestoModal('${resto.id}', '${resto.name.replace(/'/g, "\\'")}', '${resto.address.replace(/'/g, "\\'")}', '${resto.phone || ''}', '${resto.email || ''}', '${resto.image || ''}', ${resto.latitude || 0}, ${resto.longitude || 0}, '${resto.theme_color || '#E61010'}', ${resto.isActive})`}
+                    onclick={`openRestoModal('${resto.id}', '${resto.name.replace(/'/g, "\\'")}', '${resto.address.replace(/'/g, "\\'")}', '${resto.phone || ''}', '${resto.email || ''}', '${resto.image || ''}', ${resto.latitude || 0}, ${resto.longitude || 0}, '${resto.theme_color || '#E61010'}', ${resto.isActive}, '${resto.open_time || '08:00'}', '${resto.close_time || '22:00'}')`}
                     class="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-100 transition-colors"
                   >
                     Edit
@@ -110,7 +117,6 @@ export default createRoute(async (c) => {
               <input type="text" id="resto_name" placeholder="Contoh: ShopeeFood Kitchen Pusat" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm" required />
             </div>
 
-            {/* FIELD BARU: TELEPON & EMAIL */}
             <div class="grid grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-bold text-gray-700 mb-1">Nomor Telepon</label>
@@ -119,6 +125,18 @@ export default createRoute(async (c) => {
               <div>
                 <label class="block text-sm font-bold text-gray-700 mb-1">Email Gerai</label>
                 <input type="email" id="resto_email" placeholder="resto@env.com" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 outline-none text-sm" />
+              </div>
+            </div>
+
+            {/* FIELD BARU: JAM BUKA & JAM TUTUP */}
+            <div class="grid grid-cols-2 gap-4 p-4 bg-orange-50/50 rounded-xl border border-orange-100">
+              <div>
+                <label class="block text-xs font-black text-orange-800 uppercase tracking-wider mb-1">⏰ Jam Mulai Buka</label>
+                <input type="time" id="resto_open_time" class="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary/20 outline-none" required />
+              </div>
+              <div>
+                <label class="block text-xs font-black text-orange-800 uppercase tracking-wider mb-1">⏳ Jam Tutup Operasi</label>
+                <input type="time" id="resto_close_time" class="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary/20 outline-none" required />
               </div>
             </div>
             
@@ -133,12 +151,11 @@ export default createRoute(async (c) => {
               </div>
             </div>
 
-            {/* FIELD BARU: STATUS OPERASIONAL & TEMA */}
             <div class="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-xl border border-gray-200">
               <div>
                 <label class="block text-xs font-black text-gray-700 uppercase tracking-wider mb-2">Status Operasi</label>
                 <select id="resto_is_active" class="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-primary/20">
-                  <option value="1">AKTiF</option>
+                  <option value="1">AKTIF</option>
                   <option value="0">NONAKTIF</option>
                 </select>
               </div>
@@ -176,7 +193,8 @@ export default createRoute(async (c) => {
           return document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1];
         }
 
-        function openRestoModal(id='', name='', address='', phone='', email='', image='', lat=0, lng=0, theme='#E61010', isActive=1) {
+        // Perubahan parameter: Menambahkan openTime dan closeTime di ujung fungsi
+        function openRestoModal(id='', name='', address='', phone='', email='', image='', lat=0, lng=0, theme='#E61010', isActive=1, openTime='08:00', closeTime='22:00') {
           document.getElementById('modalTitle').innerText = id ? 'Edit Data Gerai' : 'Daftarkan Gerai Baru';
           document.getElementById('resto_id').value = id;
           document.getElementById('resto_name').value = name;
@@ -188,6 +206,10 @@ export default createRoute(async (c) => {
           document.getElementById('resto_lng').value = lng;
           document.getElementById('resto_theme_color').value = theme;
           document.getElementById('resto_is_active').value = isActive;
+          
+          // Mengisi value input jam buka & tutup di HTML
+          document.getElementById('resto_open_time').value = openTime;
+          document.getElementById('resto_close_time').value = closeTime;
           
           const modal = document.getElementById('restoModal');
           const inner = document.getElementById('restoModalInner');
@@ -225,6 +247,8 @@ export default createRoute(async (c) => {
 
         async function submitRestaurant() {
           const id = document.getElementById('resto_id').value;
+          
+          // Memasukkan open_time dan close_time ke payload JSON yang akan dikirim ke Backend API
           const payload = {
             name: document.getElementById('resto_name').value,
             address: document.getElementById('resto_address').value,
@@ -234,7 +258,9 @@ export default createRoute(async (c) => {
             latitude: parseFloat(document.getElementById('resto_lat').value) || 0,
             longitude: parseFloat(document.getElementById('resto_lng').value) || 0,
             theme_color: document.getElementById('resto_theme_color').value,
-            isActive: parseInt(document.getElementById('resto_is_active').value)
+            isActive: parseInt(document.getElementById('resto_is_active').value),
+            open_time: document.getElementById('resto_open_time').value || '08:00',
+            close_time: document.getElementById('resto_close_time').value || '22:00'
           };
 
           const method = id ? 'PUT' : 'POST';
