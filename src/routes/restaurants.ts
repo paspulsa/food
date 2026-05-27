@@ -52,7 +52,7 @@ restaurantRouter.get('/:id', async (c) => {
   }
 });
 
-// CREATE NEW RESTAURANT (Multi-Tenant Ready + Theme Integration)
+// CREATE NEW RESTAURANT (Multi-Tenant & Geo-Location Ready)
 restaurantRouter.post('/', async (c) => {
   const payload = c.get('jwtPayload');
   if (!payload) return c.json({ success: false, message: 'Akses ditolak. Otorisasi JWT tidak ditemukan.' }, 401);
@@ -64,14 +64,18 @@ restaurantRouter.post('/', async (c) => {
     const isActiveInt = body.isActive === false ? 0 : 1; 
     const rating = body.rating || 0.0;
     
-    // Multi-Tenant & Theme Configuration
+    // Injeksi Sistem Multi-Tenant, Koordinat GPS, dan Konfigurasi Tema
     const tenant_code = body.tenant_code || `TN-${crypto.randomUUID().substring(0,6).toUpperCase()}`;
     const owner_id = body.owner_id || payload.id;
-    const theme_color = body.theme_color || '#f97316'; 
+    const theme_color = body.theme_color || '#E61010'; // Sesuai schema Anda
+    
+    // Penanganan Koordinat
+    const lat = body.latitude ? parseFloat(body.latitude) : null;
+    const lng = body.longitude ? parseFloat(body.longitude) : null;
 
     await c.env.DB.prepare(
-      `INSERT INTO restaurants (id, name, address, phone, email, image, rating, isActive, tenant_code, owner_id, theme_color) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO restaurants (id, name, address, phone, email, image, rating, isActive, latitude, longitude, theme_color, tenant_code, owner_id) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       id, 
       body.name, 
@@ -80,22 +84,24 @@ restaurantRouter.post('/', async (c) => {
       body.email || null, 
       body.image || null, 
       rating, 
-      isActiveInt, 
-      tenant_code, 
-      owner_id,
-      theme_color
+      isActiveInt,
+      lat,
+      lng,
+      theme_color,
+      tenant_code,
+      owner_id
     ).run();
 
     return c.json({ success: true, message: 'Restoran berhasil didaftarkan', data: { id, tenant_code } }, 201);
   } catch (error: any) {
     if (error.message.includes('UNIQUE constraint failed')) {
-      return c.json({ success: false, message: 'Gagal. Kode Tenant tersebut sudah dipakai oleh mitra lain.' }, 400);
+      return c.json({ success: false, message: 'Gagal. Kode Tenant sudah dipakai.' }, 400);
     }
-    return c.json({ success: false, message: 'Kesalahan sistem saat menyimpan restoran.' }, 500);
+    return c.json({ success: false, message: 'Kesalahan sistem saat menyimpan restoran: ' + error.message }, 500);
   }
 });
 
-// UPDATE RESTAURANT
+// UPDATE RESTAURANT (Update Koordinat & Tema)
 restaurantRouter.put('/:id', async (c) => {
   const payload = c.get('jwtPayload');
   if (!payload) return c.json({ success: false, message: 'Akses ditolak.' }, 401);
@@ -105,11 +111,13 @@ restaurantRouter.put('/:id', async (c) => {
     const body = await c.req.json();
     
     const isActiveInt = body.isActive ? 1 : 0;
-    const theme_color = body.theme_color || '#f97316';
+    const theme_color = body.theme_color || '#E61010';
+    const lat = body.latitude ? parseFloat(body.latitude) : null;
+    const lng = body.longitude ? parseFloat(body.longitude) : null;
 
     const result = await c.env.DB.prepare(
       `UPDATE restaurants 
-       SET name = ?, address = ?, phone = ?, email = ?, image = ?, rating = ?, isActive = ?, theme_color = ?, updated_at = CURRENT_TIMESTAMP 
+       SET name = ?, address = ?, phone = ?, email = ?, image = ?, rating = ?, isActive = ?, latitude = ?, longitude = ?, theme_color = ?, updated_at = CURRENT_TIMESTAMP 
        WHERE id = ?`
     ).bind(
       body.name, 
@@ -118,7 +126,9 @@ restaurantRouter.put('/:id', async (c) => {
       body.email || null, 
       body.image || null, 
       body.rating || 0, 
-      isActiveInt, 
+      isActiveInt,
+      lat,
+      lng,
       theme_color,
       id
     ).run();
@@ -127,8 +137,8 @@ restaurantRouter.put('/:id', async (c) => {
       return c.json({ success: false, message: 'ID Restoran tidak ditemukan' }, 404);
     }
     return c.json({ success: true, message: 'Informasi gerai restoran berhasil diperbarui' }, 200);
-  } catch (error) {
-    return c.json({ success: false, message: 'Terjadi kesalahan sistem saat memperbarui data.' }, 500);
+  } catch (error: any) {
+    return c.json({ success: false, message: 'Terjadi kesalahan sistem: ' + error.message }, 500);
   }
 });
 
@@ -144,7 +154,7 @@ restaurantRouter.delete('/:id', async (c) => {
     if (result.meta.changes === 0) {
       return c.json({ success: false, message: 'Restoran tidak ditemukan' }, 404);
     }
-    return c.json({ success: true, message: 'Restoran beserta seluruh relasi katalognya berhasil dihapus permanen' }, 200);
+    return c.json({ success: true, message: 'Restoran berhasil dihapus permanen' }, 200);
   } catch (error) {
     return c.json({ success: false, message: 'Kesalahan sistem saat menghapus data.' }, 500);
   }
