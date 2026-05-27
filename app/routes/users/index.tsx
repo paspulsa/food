@@ -690,9 +690,10 @@ export default createRoute(async (c) => {
           additionalPrice = 0;
 
           if(item.is_custom === 1 && item.custom_options) {
-             try {
-                const options = JSON.parse(item.custom_options);
-                options.forEach((optGroup, groupIdx) => {
+           try {
+              const parsedData = JSON.parse(item.custom_options);     
+              const options = Array.isArray(parsedData) ? parsedData : (parsedData.builder || []);
+                  options.forEach((optGroup, groupIdx) => {
                    let html = \`
                      <details class="group border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-800 transition-all duration-300 shadow-sm" open>
                        <summary class="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-700/50 cursor-pointer select-none outline-none">
