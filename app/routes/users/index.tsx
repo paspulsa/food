@@ -67,17 +67,20 @@ export default createRoute(async (c) => {
   const safeItemsJson = JSON.stringify(allAvailableItems).replace(/</g, '\\u003c');
 
   return c.render(
-    <div class="bg-gray-100 min-h-screen font-sans">
+    <div class="bg-gray-100 dark:bg-gray-900 min-h-screen font-sans">
       <style dangerouslySetInnerHTML={{
         __html: `
           .hide-scrollbar::-webkit-scrollbar { display: none; }
           .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
           html { scroll-behavior: smooth; }
           .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
+          /* Kustomisasi Akordeon/Spoiler */
+          details > summary { list-style: none; }
+          details > summary::-webkit-details-marker { display: none; }
         `
       }} />
 
-      <div class="max-w-md mx-auto bg-gray-50 min-h-screen relative shadow-2xl pb-24 overflow-x-hidden">
+      <div class="max-w-md mx-auto bg-gray-50 dark:bg-gray-800 min-h-screen relative shadow-2xl pb-24 overflow-x-hidden transition-colors duration-300">
         
         {/* =========================================================
             HEADER & SEARCH BAR
@@ -101,7 +104,7 @@ export default createRoute(async (c) => {
             <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
             </div>
-            <input type="text" class="w-full pl-10 pr-4 py-2.5 bg-white rounded-xl text-sm text-gray-800 shadow-inner focus:outline-none focus:ring-2 focus:ring-white/50" placeholder="Cari menu, promo, atau resto..." />
+            <input type="text" class="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-700 rounded-xl text-sm text-gray-900 dark:text-white shadow-inner focus:outline-none focus:ring-2 focus:ring-white/50 placeholder-gray-400 dark:placeholder-gray-300" placeholder="Cari menu, promo, atau resto..." />
           </div>
         </div>
 
@@ -115,7 +118,7 @@ export default createRoute(async (c) => {
               <div class="flex overflow-x-auto snap-x snap-mandatory gap-3 hide-scrollbar pb-2">
                 {appPromos.map((promo: any) => (
                   <a href={promo.action_url || '#'} class="snap-center shrink-0 w-[85%] sm:w-[280px] block transform hover:scale-[1.02] transition-transform">
-                    <img src={promo.image} class="w-full h-32 object-cover rounded-2xl shadow-sm border border-gray-100 bg-gray-200" alt="Promo App" />
+                    <img src={promo.image} class="w-full h-32 object-cover rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 bg-gray-200 dark:bg-gray-700" alt="Promo App" />
                   </a>
                 ))}
               </div>
@@ -123,16 +126,16 @@ export default createRoute(async (c) => {
           )}
 
           {/* =========================================================
-              KATEGORI GRID (Trigger Filter Instan)
+              KATEGORI GRID (6 Kolom per Baris - DIKEMBALIKAN SESUAI PERMINTAAN)
               ========================================================= */}
           <div class="px-4 mt-4">
             <div class="grid grid-cols-6 gap-y-4 gap-x-1 sm:gap-x-2">
               {categories.length > 0 ? categories.map((cat: any) => (
                 <div class="flex flex-col items-center gap-1.5 cursor-pointer group" onclick={`showCategory('${cat.id}', '${cat.name.replace(/'/g, "\\'")}')`}>
-                  <div class="w-[46px] h-[46px] sm:w-[50px] sm:h-[50px] bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center p-1.5 group-hover:bg-orange-50 transition overflow-hidden">
+                  <div class="w-[46px] h-[46px] sm:w-[50px] sm:h-[50px] bg-white dark:bg-gray-700 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-600 flex items-center justify-center p-1.5 group-hover:bg-orange-50 dark:group-hover:bg-gray-600 transition overflow-hidden">
                     <img src={cat.image || `https://ui-avatars.com/api/?name=${cat.name}&background=ee4d2d&color=fff`} class="w-full h-full object-contain" alt={cat.name} />
                   </div>
-                  <span class="text-[9px] text-center font-bold text-gray-700 leading-tight line-clamp-2 px-0.5 group-hover:text-[#ee4d2d] transition-colors">{cat.name}</span>
+                  <span class="text-[9px] text-center font-bold text-gray-700 dark:text-gray-300 leading-tight line-clamp-2 px-0.5 group-hover:text-[#ee4d2d] transition-colors">{cat.name}</span>
                 </div>
               )) : (
                 <div class="col-span-6 text-center text-xs text-gray-400 py-2">Belum ada kategori.</div>
@@ -140,18 +143,18 @@ export default createRoute(async (c) => {
             </div>
           </div>
 
-          <div class="h-2 bg-gray-100 mt-6 w-full"></div>
+          <div class="h-2 bg-gray-100 dark:bg-gray-900 mt-6 w-full"></div>
 
           {/* =========================================================
               WADAH DINAMIS KATEGORI (SPA FILTER)
               ========================================================= */}
-          <div id="dynamic-category-container" class="mt-4 pb-8 hidden animate-fade-in bg-orange-50/30 rounded-xl mx-2 border border-orange-100/50 p-2">
+          <div id="dynamic-category-container" class="mt-4 pb-8 hidden animate-fade-in bg-orange-50/30 dark:bg-gray-800 rounded-xl mx-2 border border-orange-100/50 dark:border-gray-700 p-2">
             <div class="px-2 flex justify-between items-center mb-4 pt-2">
               <h3 id="dynamic-category-title" class="text-base font-black text-[#ee4d2d] flex items-center gap-2">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
                 <span id="dynamic-category-name">Kategori Pilihan</span>
               </h3>
-              <button onclick="document.getElementById('dynamic-category-container').classList.add('hidden')" class="text-xs font-bold text-gray-400 bg-gray-200/50 hover:bg-gray-200 px-3 py-1.5 rounded-full transition shadow-sm">
+              <button onclick="document.getElementById('dynamic-category-container').classList.add('hidden')" class="text-xs font-bold text-gray-600 dark:text-gray-300 bg-gray-200/50 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 px-3 py-1.5 rounded-full transition shadow-sm">
                 Tutup x
               </button>
             </div>
@@ -160,56 +163,51 @@ export default createRoute(async (c) => {
 
           {/* =========================================================
               PALING LAKU DI SEKITARMU (BEST SELLERS)
-              DIUBAH MENJADI CARD KECIL (DIBAGI 3) SLIDER HORIZONTAL
               ========================================================= */}
           {bestSellers.length > 0 && (
             <div class="mt-4 pb-2">
               <div class="px-4 flex justify-between items-center mb-3">
-                <h3 class="text-base font-black text-gray-800 flex items-center gap-1.5">
+                <h3 class="text-base font-black text-gray-900 dark:text-white flex items-center gap-1.5">
                   <span class="text-xl">🔥</span> Paling Laku di Sekitarmu
                 </h3>
               </div>
               
-              {/* SLIDER CARD KECIL (w-28 / Lebar Card +- 112px untuk memuat 3 di layar HP) */}
               <div class="flex overflow-x-auto snap-x snap-mandatory gap-2.5 px-4 hide-scrollbar pb-4 pt-1">
                 {bestSellers.map((item: any, index: number) => {
                   const isOutOfStock = item.stock === 0;
                   const currentPrice = item.is_promo ? item.promo_price : item.price;
 
                   return (
-                    <div class="snap-start shrink-0 w-28 bg-white rounded-xl shadow-sm border border-orange-100 relative flex flex-col overflow-hidden group">
-                      {/* Badge TOP */}
+                    <div class="snap-start shrink-0 w-28 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-orange-100 dark:border-gray-700 relative flex flex-col overflow-hidden group">
                       <div class="absolute top-0 left-0 bg-gradient-to-r from-orange-500 to-[#ee4d2d] text-white text-[8px] font-black px-1.5 py-0.5 rounded-br-lg z-10 shadow-sm flex items-center gap-0.5">
                         TOP {index + 1}
                       </div>
                       
-                      {/* Gambar Card Kecil */}
-                      <div class="relative h-24 w-full bg-gray-50 overflow-hidden cursor-pointer" onclick={`openProductDetail('${item.id}')`}>
+                      <div class="relative h-24 w-full bg-gray-50 dark:bg-gray-700 overflow-hidden cursor-pointer" onclick={`openProductDetail('${item.id}')`}>
                         <img src={item.image || 'https://via.placeholder.com/150'} class={`w-full h-full object-cover transition-transform duration-500 ${isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-110'}`} />
                         {isOutOfStock && (
-                          <div class="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center">
+                          <div class="absolute inset-0 bg-white/40 dark:bg-black/40 backdrop-blur-[2px] flex items-center justify-center">
                             <span class="bg-gray-900 text-white text-[8px] font-black px-2 py-0.5 rounded-full shadow-md">HABIS</span>
                           </div>
                         )}
                       </div>
                       
-                      {/* Detail Data Card Kecil */}
                       <div class="p-2 flex flex-col flex-1 justify-between">
                         <div>
-                          <h4 class="text-[10px] font-bold text-gray-800 line-clamp-2 leading-tight mb-1 cursor-pointer" onclick={`openProductDetail('${item.id}')`}>{item.name}</h4>
+                          <h4 class="text-[10px] font-bold text-gray-900 dark:text-white line-clamp-2 leading-tight mb-1 cursor-pointer" onclick={`openProductDetail('${item.id}')`}>{item.name}</h4>
                           <span class="text-[11px] font-black text-[#ee4d2d] block">{formatter.format(currentPrice)}</span>
                         </div>
                         <div class="mt-2 flex justify-between items-center">
-                          <span class="text-[8px] font-bold text-gray-400 bg-gray-100 px-1 py-0.5 rounded flex items-center gap-0.5">
+                          <span class="text-[8px] font-bold text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded flex items-center gap-0.5">
                             <svg class="w-2 h-2 text-orange-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"></path></svg>
                             {item.sold_count}
                           </span>
                           {item.is_custom === 1 ? (
-                            <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[8px] font-bold px-2 py-1 rounded-full shadow-sm transition-colors ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
+                            <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[8px] font-bold px-2 py-1 rounded-full shadow-sm transition-colors ${isOutOfStock ? 'bg-gray-100 dark:bg-gray-700 text-gray-300 dark:text-gray-500 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white dark:bg-[#ee4d2d]/20 dark:hover:bg-[#ee4d2d]'}`}>
                               Pilih
                             </button>
                           ) : (
-                            <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${currentPrice})` : undefined} disabled={isOutOfStock} class={`w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#ee4d2d] text-white'}`}>
+                            <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${currentPrice})` : undefined} disabled={isOutOfStock} class={`w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 ${isOutOfStock ? 'bg-gray-100 dark:bg-gray-700 text-gray-300 dark:text-gray-500 cursor-not-allowed' : 'bg-[#ee4d2d] text-white'}`}>
                               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4"></path></svg>
                             </button>
                           )}
@@ -222,19 +220,19 @@ export default createRoute(async (c) => {
             </div>
           )}
 
-          <div class="h-2 bg-gray-100 w-full"></div>
+          <div class="h-2 bg-gray-100 dark:bg-gray-900 w-full"></div>
 
           {/* =========================================================
-              FLASH SALE / PROMO GERCEP (CARD LEBIH BESAR)
+              FLASH SALE / PROMO GERCEP (CARD LEBIH BESAR, CAROUSEL)
               ========================================================= */}
           {promoItems.length > 0 && (
             <div class="mt-4">
               <div class="px-4 flex justify-between items-center mb-3">
-                <h3 class="text-base font-black text-gray-800 italic flex items-center gap-1">
+                <h3 class="text-base font-black text-gray-900 dark:text-white italic flex items-center gap-1">
                   <svg class="w-5 h-5 text-[#ee4d2d]" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"></path></svg>
                   PROMO GERCEP
                 </h3>
-                <a href="#" class="text-[11px] font-bold text-[#ee4d2d] hover:underline">Lihat semua</a>
+                <a href="/users/promos" class="text-[11px] font-bold text-[#ee4d2d] hover:underline bg-orange-50 dark:bg-[#ee4d2d]/10 px-2 py-1 rounded transition-colors">Lihat semua</a>
               </div>
 
               <div class="flex overflow-x-auto snap-x snap-mandatory gap-3 px-4 hide-scrollbar pb-4 pt-1">
@@ -243,34 +241,34 @@ export default createRoute(async (c) => {
                   const isOutOfStock = item.stock === 0;
 
                   return (
-                    <div class="snap-start shrink-0 w-36 bg-white rounded-xl shadow-sm border border-gray-100 relative flex flex-col overflow-hidden group">
+                    <div class="snap-start shrink-0 w-36 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 relative flex flex-col overflow-hidden group">
                       <div class="absolute top-0 left-0 bg-[#ee4d2d] text-white text-[10px] font-black px-2 py-0.5 rounded-br-lg z-10 shadow-sm">{discountPercent}% OFF</div>
                       
-                      <div class="relative h-32 w-full bg-gray-50 overflow-hidden cursor-pointer" onclick={`openProductDetail('${item.id}')`}>
+                      <div class="relative h-32 w-full bg-gray-50 dark:bg-gray-700 overflow-hidden cursor-pointer" onclick={`openProductDetail('${item.id}')`}>
                         <img src={item.image || 'https://via.placeholder.com/150'} class={`w-full h-full object-cover transition-transform ${isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-105'}`} />
                         {isOutOfStock && (
-                          <div class="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center">
-                            <span class="bg-gray-900 text-white text-[10px] font-black px-3 py-1 rounded-full">HABIS</span>
+                          <div class="absolute inset-0 bg-white/40 dark:bg-black/40 backdrop-blur-[2px] flex items-center justify-center">
+                            <span class="bg-gray-900 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-md">HABIS</span>
                           </div>
                         )}
                       </div>
                       
                       <div class="p-2.5 flex flex-col flex-1 justify-between">
                         <div>
-                          <h4 class="text-xs font-bold text-gray-800 line-clamp-2 leading-snug cursor-pointer" onclick={`openProductDetail('${item.id}')`}>{item.name}</h4>
+                          <h4 class="text-xs font-bold text-gray-900 dark:text-white line-clamp-2 leading-snug cursor-pointer" onclick={`openProductDetail('${item.id}')`}>{item.name}</h4>
                           <div class="mt-1.5 flex flex-col">
-                            <span class="text-[10px] text-gray-400 line-through decoration-gray-400">{formatter.format(item.price)}</span>
+                            <span class="text-[10px] text-gray-400 dark:text-gray-500 line-through decoration-gray-400">{formatter.format(item.price)}</span>
                             <span class="text-sm font-black text-[#ee4d2d] leading-none mt-0.5">{formatter.format(item.promo_price)}</span>
                           </div>
                         </div>
                         <div class="mt-3 flex justify-between items-center">
-                          <span class="text-[9px] font-medium text-gray-500">Stok: {item.stock}</span>
+                          <span class="text-[9px] font-medium text-gray-500 dark:text-gray-400">Stok: {item.stock}</span>
                           {item.is_custom === 1 ? (
-                            <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[10px] font-bold px-3 py-1.5 rounded-full transition-colors ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
+                            <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm transition-colors ${isOutOfStock ? 'bg-gray-100 dark:bg-gray-700 text-gray-300 dark:text-gray-500 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white dark:bg-[#ee4d2d]/20 dark:hover:bg-[#ee4d2d]'}`}>
                               Pilih
                             </button>
                           ) : (
-                            <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.promo_price})` : undefined} disabled={isOutOfStock} class={`w-6 h-6 rounded-full flex items-center justify-center transition-colors active:scale-90 ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
+                            <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.promo_price})` : undefined} disabled={isOutOfStock} class={`w-6 h-6 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 ${isOutOfStock ? 'bg-gray-100 dark:bg-gray-700 text-gray-300 dark:text-gray-500 cursor-not-allowed' : 'bg-[#ee4d2d] text-white hover:bg-orange-700'}`}>
                               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
                             </button>
                           )}
@@ -283,24 +281,24 @@ export default createRoute(async (c) => {
             </div>
           )}
 
-          {promoItems.length > 0 && <div class="h-2 bg-gray-100 w-full"></div>}
+          {promoItems.length > 0 && <div class="h-2 bg-gray-100 dark:bg-gray-900 w-full"></div>}
 
           {/* =========================================================
               REKOMENDASI (EXPLORE)
               ========================================================= */}
           <div class="mt-4 pb-8">
             <div class="px-4 flex justify-between items-center mb-3">
-              <h3 class="text-base font-black text-gray-800">Eksplor Menu Lainnya</h3>
+              <h3 class="text-base font-black text-gray-900 dark:text-white">Eksplor Menu Lainnya</h3>
             </div>
             <div class="grid grid-cols-2 gap-3 px-4">
               {recommendedItems.map((item: any) => {
                 const isOutOfStock = item.stock === 0;
                 return (
-                  <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden group">
-                    <div class="relative h-32 w-full bg-gray-50 overflow-hidden cursor-pointer" onclick={`openProductDetail('${item.id}')`}>
+                  <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col overflow-hidden group">
+                    <div class="relative h-32 w-full bg-gray-50 dark:bg-gray-700 overflow-hidden cursor-pointer" onclick={`openProductDetail('${item.id}')`}>
                       <img src={item.image || 'https://via.placeholder.com/150'} class={`w-full h-full object-cover transition-transform duration-500 ${isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-105'}`} />
                       {isOutOfStock && (
-                        <div class="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center">
+                        <div class="absolute inset-0 bg-white/40 dark:bg-black/40 backdrop-blur-[2px] flex items-center justify-center">
                           <span class="bg-gray-900 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-md">HABIS</span>
                         </div>
                       )}
@@ -308,17 +306,17 @@ export default createRoute(async (c) => {
                     
                     <div class="p-3 flex flex-col flex-1 justify-between">
                       <div>
-                        <h4 class="text-xs font-bold text-gray-800 line-clamp-2 leading-snug mb-1 cursor-pointer" onclick={`openProductDetail('${item.id}')`}>{item.name}</h4>
-                        <span class="text-sm font-black text-gray-900">{formatter.format(item.price)}</span>
+                        <h4 class="text-xs font-bold text-gray-900 dark:text-white line-clamp-2 leading-snug mb-1 cursor-pointer" onclick={`openProductDetail('${item.id}')`}>{item.name}</h4>
+                        <span class="text-sm font-black text-gray-900 dark:text-white">{formatter.format(item.price)}</span>
                       </div>
                       <div class="mt-3 flex justify-between items-end">
-                        <span class="text-[9px] font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">Stok: {item.stock}</span>
+                        <span class="text-[9px] font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">Stok: {item.stock}</span>
                         {item.is_custom === 1 ? (
-                          <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm transition-colors ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
+                          <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm transition-colors ${isOutOfStock ? 'bg-gray-100 dark:bg-gray-700 text-gray-300 dark:text-gray-500 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white dark:bg-[#ee4d2d]/20 dark:hover:bg-[#ee4d2d]'}`}>
                             Pilih
                           </button>
                         ) : (
-                          <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price})` : undefined} disabled={isOutOfStock} class={`w-7 h-7 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#ee4d2d] text-white hover:bg-orange-700'}`}>
+                          <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price})` : undefined} disabled={isOutOfStock} class={`w-7 h-7 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 ${isOutOfStock ? 'bg-gray-100 dark:bg-gray-700 text-gray-300 dark:text-gray-500 cursor-not-allowed' : 'bg-[#ee4d2d] text-white hover:bg-orange-700'}`}>
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
                           </button>
                         )}
@@ -335,27 +333,27 @@ export default createRoute(async (c) => {
             MODAL BOTTOM SHEET LOKASI
             ========================================================= */}
         <div id="location-modal" class="fixed inset-0 z-[100] hidden items-end justify-center bg-black/50 backdrop-blur-sm transition-opacity duration-300 opacity-0">
-          <div id="location-modal-inner" class="w-full max-w-md bg-white rounded-t-3xl shadow-2xl transform translate-y-full transition-transform duration-300 p-6 pb-safe">
+          <div id="location-modal-inner" class="w-full max-w-md bg-white dark:bg-gray-800 rounded-t-3xl shadow-2xl transform translate-y-full transition-transform duration-300 p-6 pb-safe border-t border-gray-100 dark:border-gray-700">
             <div class="flex justify-between items-center mb-6">
-               <h3 class="font-black text-gray-800 text-lg">Alamat Pengiriman</h3>
-               <button onclick="closeLocationModal()" class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
+               <h3 class="font-black text-gray-900 dark:text-white text-lg">Alamat Pengiriman</h3>
+               <button onclick="closeLocationModal()" class="w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
                </button>
             </div>
             
             <div class="space-y-5">
-               <button id="btn-gps" onclick="detectGPSLocation()" class="w-full flex justify-center items-center gap-2.5 p-3.5 bg-orange-50 text-[#ee4d2d] rounded-2xl font-bold text-sm border border-orange-100 hover:bg-orange-100 transition-colors">
+               <button id="btn-gps" onclick="detectGPSLocation()" class="w-full flex justify-center items-center gap-2.5 p-3.5 bg-orange-50 dark:bg-[#ee4d2d]/10 text-[#ee4d2d] rounded-2xl font-bold text-sm border border-orange-100 dark:border-transparent hover:bg-orange-100 transition-colors">
                   <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
                   Gunakan Lokasi Saat Ini (GPS)
                </button>
                
                <div class="relative">
-                  <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-200"></div></div>
-                  <div class="relative flex justify-center"><span class="bg-white px-4 text-[10px] text-gray-400 font-bold uppercase tracking-widest">Atau Ketik Manual</span></div>
+                  <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-200 dark:border-gray-700"></div></div>
+                  <div class="relative flex justify-center"><span class="bg-white dark:bg-gray-800 px-4 text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest">Atau Ketik Manual</span></div>
                </div>
                
                <div>
-                  <textarea id="manual-address-input" rows={3} class="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#ee4d2d]/20 focus:border-[#ee4d2d] transition-all font-medium placeholder-gray-400 resize-none" placeholder="Cth: Jl. Sudirman No. 12, RT 01/RW 02, Jakarta Barat..."></textarea>
+                  <textarea id="manual-address-input" rows={3} class="w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-2xl p-4 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#ee4d2d]/50 focus:border-[#ee4d2d] transition-all font-medium placeholder-gray-400 dark:placeholder-gray-500 resize-none" placeholder="Cth: Jl. Sudirman No. 12, RT 01/RW 02, Jakarta Barat..."></textarea>
                </div>
                
                <button onclick="saveManualLocation()" class="w-full bg-[#ee4d2d] text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-[#ee4d2d]/30 hover:bg-orange-700 active:scale-[0.98] transition-all">
@@ -370,8 +368,8 @@ export default createRoute(async (c) => {
             ========================================================= */}
         {modalPromo && (
           <div id="promo-modal" class="fixed inset-0 z-[100] hidden items-center justify-center p-6 bg-black/60 backdrop-blur-sm transition-opacity duration-300 opacity-0">
-            <div class="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden transform scale-95 transition-transform duration-300" id="promo-modal-inner">
-              <button onclick="closePromoModal()" class="absolute top-3 right-3 w-8 h-8 bg-black/30 backdrop-blur rounded-full flex items-center justify-center text-white hover:bg-black/50 transition z-10">
+            <div class="relative w-full max-w-sm bg-white dark:bg-gray-800 rounded-3xl shadow-2xl overflow-hidden transform scale-95 transition-transform duration-300" id="promo-modal-inner">
+              <button onclick="closePromoModal()" class="absolute top-3 right-3 w-8 h-8 bg-black/40 backdrop-blur rounded-full flex items-center justify-center text-white hover:bg-black/60 transition z-10">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
               </button>
               <a href={modalPromo.action_url || '#'}>
@@ -382,35 +380,37 @@ export default createRoute(async (c) => {
         )}
 
         {/* =========================================================
-            MODAL BOTTOM SHEET DETAIL PRODUK & KUSTOMISASI JSON
+            MODAL BOTTOM SHEET DETAIL PRODUK & KUSTOMISASI (SPOILER)
             ========================================================= */}
         <div id="product-detail-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] hidden flex flex-col justify-end opacity-0 transition-opacity duration-300">
-          <div class="bg-white w-full max-w-md mx-auto rounded-t-3xl max-h-[85vh] flex flex-col transform translate-y-full transition-transform duration-300" id="pdm-inner">
+          <div class="bg-white dark:bg-gray-800 w-full max-w-md mx-auto rounded-t-3xl max-h-[85vh] flex flex-col transform translate-y-full transition-transform duration-300" id="pdm-inner">
             
-            <div class="relative h-56 bg-gray-100 rounded-t-3xl flex-shrink-0">
+            <div class="relative h-56 bg-gray-100 dark:bg-gray-700 rounded-t-3xl flex-shrink-0">
               <img id="pdm-image" src="" class="w-full h-full object-cover rounded-t-3xl" />
-              <button onclick="closeProductDetail()" class="absolute top-4 right-4 w-8 h-8 bg-black/40 text-white rounded-full flex items-center justify-center backdrop-blur-md hover:bg-black/60 transition-colors">
+              <button onclick="closeProductDetail()" class="absolute top-4 right-4 w-8 h-8 bg-black/40 text-white rounded-full flex items-center justify-center backdrop-blur-md hover:bg-black/60 transition-colors shadow-sm">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
               </button>
             </div>
 
-            <div class="p-5 overflow-y-auto flex-1 hide-scrollbar">
-              <h2 id="pdm-name" class="text-xl font-black text-gray-800 leading-tight"></h2>
-              <p id="pdm-desc" class="text-sm text-gray-500 mt-2 leading-relaxed"></p>
+            <div class="p-5 overflow-y-auto flex-1 hide-scrollbar pb-6">
+              <h2 id="pdm-name" class="text-xl font-black text-gray-900 dark:text-white leading-tight"></h2>
+              <p id="pdm-desc" class="text-sm text-gray-500 dark:text-gray-400 mt-2 leading-relaxed"></p>
               <div class="mt-3 flex items-center gap-2">
                  <span id="pdm-price" class="text-lg font-black text-[#ee4d2d]"></span>
-                 <span id="pdm-original-price" class="text-xs font-bold text-gray-400 line-through hidden"></span>
+                 <span id="pdm-original-price" class="text-xs font-bold text-gray-400 dark:text-gray-500 line-through hidden"></span>
               </div>
-              <div id="pdm-custom-container" class="mt-6 space-y-5 border-t border-gray-100 pt-5"></div>
+              
+              {/* Tempat Injeksi Opsi Custom HTML (SPOILER / ACCORDION) */}
+              <div id="pdm-custom-container" class="mt-6 space-y-3"></div>
             </div>
 
-            <div class="p-4 border-t border-gray-100 bg-white flex items-center gap-4 flex-shrink-0 pb-safe shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]">
-              <div class="flex items-center bg-gray-100 rounded-xl px-1">
-                <button onclick="updateQty(-1)" class="w-10 h-10 flex items-center justify-center text-gray-600 font-black text-lg hover:bg-gray-200 rounded-l-xl transition">-</button>
-                <span id="pdm-qty" class="w-6 text-center font-black">1</span>
-                <button onclick="updateQty(1)" class="w-10 h-10 flex items-center justify-center text-[#ee4d2d] font-black text-lg hover:bg-gray-200 rounded-r-xl transition">+</button>
+            <div class="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 flex items-center gap-4 flex-shrink-0 pb-safe shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]">
+              <div class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-xl px-1 border border-gray-200 dark:border-gray-600">
+                <button onclick="updateQty(-1)" class="w-10 h-10 flex items-center justify-center text-gray-600 dark:text-gray-300 font-black text-xl hover:bg-gray-200 dark:hover:bg-gray-600 rounded-l-xl transition">-</button>
+                <span id="pdm-qty" class="w-6 text-center font-black text-gray-900 dark:text-white">1</span>
+                <button onclick="updateQty(1)" class="w-10 h-10 flex items-center justify-center text-[#ee4d2d] font-black text-xl hover:bg-gray-200 dark:hover:bg-gray-600 rounded-r-xl transition">+</button>
               </div>
-              <button id="pdm-add-btn" class="flex-1 bg-[#ee4d2d] text-white py-3.5 rounded-xl font-bold shadow-md shadow-orange-500/30 active:scale-95 transition-transform flex items-center justify-center gap-2" onclick="submitProductToCart()">
+              <button id="pdm-add-btn" class="flex-1 bg-[#ee4d2d] text-white py-3.5 rounded-xl font-bold shadow-md shadow-[#ee4d2d]/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2" onclick="submitProductToCart()">
                 <span>Tambah</span>
                 <span class="w-1 h-1 rounded-full bg-white/50"></span>
                 <span id="pdm-total-btn-price"></span>
@@ -422,26 +422,26 @@ export default createRoute(async (c) => {
         {/* =========================================================
             BOTTOM NAVIGATION BAR (FIXED)
             ========================================================= */}
-        <div class="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white border-t border-gray-200 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.08)] z-[40]">
+        <div class="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.08)] z-[40]">
           <div class="flex justify-around items-center h-[60px] px-2 pb-safe">
             <a href="/users" class="flex flex-col items-center gap-1 text-[#ee4d2d]">
               <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg>
               <span class="text-[10px] font-bold">Home</span>
             </a>
-            <a href="#" class="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition">
+            <a href="/users/promos" class="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 hover:text-[#ee4d2d] transition-colors">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path></svg>
               <span class="text-[10px] font-semibold">Promo</span>
             </a>
-            <a href="#" class="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition relative">
-              <div id="nav-cart-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white hidden">0</div>
+            <a href="/users/cart" class="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 hover:text-[#ee4d2d] transition-colors relative">
+              <div id="nav-cart-badge" class="absolute -top-1 -right-1 bg-[#ee4d2d] text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-white dark:border-gray-800 hidden">0</div>
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
               <span class="text-[10px] font-semibold">Keranjang</span>
             </a>
-            <a href="#" class="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition">
+            <a href="/users/orders" class="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 hover:text-[#ee4d2d] transition-colors">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
               <span class="text-[10px] font-semibold">Order</span>
             </a>
-            <a href="/users/login" class="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition">
+            <a href="/users/login" class="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 hover:text-[#ee4d2d] transition-colors">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
               <span class="text-[10px] font-semibold">Profile</span>
             </a>
@@ -451,10 +451,10 @@ export default createRoute(async (c) => {
       </div>
 
       {/* =========================================================
-          SCRIPT INTERAKTIF UTAMA (CLIENT-SIDE)
+          SCRIPT INTERAKTIF (CLIENT-SIDE JS MURNI)
           ========================================================= */}
       <script dangerouslySetInnerHTML={{ __html: `
-        // DATA GLOBAL DARI SERVER
+        // DATA GLOBAL
         const DB_ADDRESS = \`${userAddress}\`;
         const PRODUCTS = ${safeItemsJson};
         const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
@@ -467,7 +467,7 @@ export default createRoute(async (c) => {
         let basePrice = 0;
         let additionalPrice = 0;
         
-        // --- 1. LOGIKA TOAST / NOTIFIKASI ---
+        // --- 1. TOAST NOTIFIKASI ELEGAN ---
         function showToast(msg, isError = false) {
           const toast = document.createElement('div');
           toast.className = \`fixed bottom-24 left-1/2 transform -translate-x-1/2 backdrop-blur-md text-white text-[11px] font-bold px-5 py-3 rounded-full shadow-2xl z-[150] flex items-center gap-2 transition-all duration-300 opacity-0 translate-y-4 border \${isError ? 'bg-red-600/95 border-red-500' : 'bg-gray-900/95 border-gray-800'}\`;
@@ -479,10 +479,10 @@ export default createRoute(async (c) => {
           setTimeout(() => { toast.classList.add('opacity-0', 'translate-y-4'); setTimeout(() => toast.remove(), 300); }, 2500);
         }
 
-        // --- 2. LOGIKA LOKASI & MODAL LOKASI ---
+        // --- 2. LOKASI GPS & MODAL LOKASI ---
         function initLocation() {
           const locElement = document.getElementById('user-location');
-          const arrowIcon = '<svg class="w-4 h-4 ml-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>';
+          const arrowIcon = '<svg class="w-4 h-4 ml-1 flex-shrink-0 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>';
           
           if (DB_ADDRESS && DB_ADDRESS.trim() !== '') {
             locElement.innerHTML = \`<span class="truncate">\${DB_ADDRESS}</span> \${arrowIcon}\`;
@@ -493,7 +493,7 @@ export default createRoute(async (c) => {
             locElement.innerHTML = \`<span class="truncate">\${savedAddress}</span> \${arrowIcon}\`;
             return;
           }
-          locElement.innerHTML = '<span class="truncate">Mendeteksi lokasi...</span> <svg class="animate-spin w-4 h-4 ml-1 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
+          locElement.innerHTML = '<span class="truncate">Mendeteksi...</span> <svg class="animate-spin w-4 h-4 ml-1 flex-shrink-0 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>';
           
           if (navigator.geolocation) {
             navigator.geolocation.getCurrentPosition(async (position) => {
@@ -502,10 +502,7 @@ export default createRoute(async (c) => {
                 try {
                   const res = await fetch(\`https://nominatim.openstreetmap.org/reverse?format=json&lat=\${lat}&lon=\${lon}&zoom=16\`);
                   const data = await res.json();
-                  let streetName = "Lokasi Saya";
-                  if (data && data.address) {
-                    streetName = data.address.road || data.address.village || data.address.suburb || data.display_name.split(',')[0];
-                  }
+                  let streetName = data.address.road || data.address.village || data.address.suburb || data.display_name.split(',')[0];
                   locElement.innerHTML = \`<span class="truncate">\${streetName}</span> \${arrowIcon}\`;
                   localStorage.setItem('user_saved_address', streetName);
                 } catch(e) {
@@ -543,7 +540,7 @@ export default createRoute(async (c) => {
           const val = document.getElementById('manual-address-input').value;
           if (val && val.trim() !== '') {
             localStorage.setItem('user_saved_address', val);
-            document.getElementById('user-location').innerHTML = \`<span class="truncate">\${val}</span> <svg class="w-4 h-4 ml-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>\`;
+            document.getElementById('user-location').innerHTML = \`<span class="truncate">\${val}</span> <svg class="w-4 h-4 ml-1 flex-shrink-0 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>\`;
             closeLocationModal();
             showToast('Alamat berhasil disimpan');
           } else {
@@ -564,7 +561,7 @@ export default createRoute(async (c) => {
                   const data = await res.json();
                   let streetName = data.address.road || data.address.suburb || data.display_name.split(',')[0];
                   localStorage.setItem('user_saved_address', streetName);
-                  document.getElementById('user-location').innerHTML = \`<span class="truncate">\${streetName}</span> <svg class="w-4 h-4 ml-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>\`;
+                  document.getElementById('user-location').innerHTML = \`<span class="truncate">\${streetName}</span> <svg class="w-4 h-4 ml-1 flex-shrink-0 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>\`;
                   closeLocationModal();
                   showToast('Lokasi akurat ditemukan!');
                 } catch(e) {
@@ -572,17 +569,14 @@ export default createRoute(async (c) => {
                 } finally { btn.innerHTML = originalHtml; }
               }, 
               (error) => { 
-                showToast('Akses GPS ditolak / Gagal melacak.', true);
+                showToast('Akses GPS ditolak.', true);
                 btn.innerHTML = originalHtml; 
               }
             );
-          } else {
-            showToast('Perangkat tidak mendukung GPS', true);
-            btn.innerHTML = originalHtml;
           }
         }
 
-        // --- 3. MODAL POPUP PROMO ---
+        // --- 3. MODAL PROMO AWAL ---
         function initPromoModal() {
           const modal = document.getElementById('promo-modal');
           if (!modal) return;
@@ -606,7 +600,7 @@ export default createRoute(async (c) => {
           setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
         }
 
-        // --- 4. LOGIKA FILTER KATEGORI INSTAN (SPA) ---
+        // --- 4. FILTER KATEGORI IN-PLACE (Ganti Grid Rekomendasi) ---
         function showCategory(categoryId, categoryName) {
           const container = document.getElementById('dynamic-category-container');
           const titleName = document.getElementById('dynamic-category-name');
@@ -616,31 +610,31 @@ export default createRoute(async (c) => {
           titleName.innerText = categoryName;
 
           if (filtered.length === 0) {
-             itemsBox.innerHTML = '<div class="col-span-2 text-center py-10 bg-white rounded-xl border border-orange-100 shadow-sm"><p class="text-sm font-bold text-gray-400">Belum ada menu di kategori ini.</p></div>';
+             itemsBox.innerHTML = '<div class="col-span-2 text-center py-10 bg-white dark:bg-gray-700 rounded-xl border border-gray-100 dark:border-gray-600 shadow-sm"><p class="text-sm font-bold text-gray-400">Belum ada menu di kategori ini.</p></div>';
           } else {
              itemsBox.innerHTML = filtered.map(item => {
                const isOutOfStock = item.stock === 0;
                const currentPrice = item.is_promo ? item.promo_price : item.price;
                const imgClass = isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-105';
-               const outOfStockOverlay = isOutOfStock ? '<div class="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center"><span class="bg-gray-900 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-md">HABIS</span></div>' : '';
+               const outOfStockOverlay = isOutOfStock ? '<div class="absolute inset-0 bg-white/40 dark:bg-black/40 backdrop-blur-[2px] flex items-center justify-center"><span class="bg-gray-900 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-md">HABIS</span></div>' : '';
 
                const btnHtml = item.is_custom === 1
-                 ? \`<button onclick="\${!isOutOfStock ? \`openProductDetail('\${item.id}')\` : ''}" \${isOutOfStock ? 'disabled' : ''} class="text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm transition-colors \${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}">Pilih</button>\`
-                 : \`<button onclick="\${!isOutOfStock ? \`addToCart('\${item.id}', '\${item.name.replace(/'/g, "\\\\'")}', \${currentPrice})\` : ''}" \${isOutOfStock ? 'disabled' : ''} class="w-7 h-7 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 \${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#ee4d2d] text-white hover:bg-orange-700'}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg></button>\`;
+                 ? \`<button onclick="\${!isOutOfStock ? \`openProductDetail('\${item.id}')\` : ''}" \${isOutOfStock ? 'disabled' : ''} class="text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm transition-colors \${isOutOfStock ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed' : 'bg-orange-50 dark:bg-[#ee4d2d]/20 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}">Pilih</button>\`
+                 : \`<button onclick="\${!isOutOfStock ? \`addToCart('\${item.id}', '\${item.name.replace(/'/g, "\\\\'")}', \${currentPrice})\` : ''}" \${isOutOfStock ? 'disabled' : ''} class="w-7 h-7 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 \${isOutOfStock ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed' : 'bg-[#ee4d2d] text-white hover:bg-orange-700'}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg></button>\`;
 
                return \`
-                 <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden group">
-                   <div class="relative h-32 w-full bg-gray-50 overflow-hidden cursor-pointer" onclick="openProductDetail('\${item.id}')">
+                 <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col overflow-hidden group">
+                   <div class="relative h-32 w-full bg-gray-50 dark:bg-gray-700 overflow-hidden cursor-pointer" onclick="openProductDetail('\${item.id}')">
                      <img src="\${item.image || 'https://via.placeholder.com/150'}" class="w-full h-full object-cover transition-transform duration-500 \${imgClass}" />
                      \${outOfStockOverlay}
                    </div>
                    <div class="p-3 flex flex-col flex-1 justify-between">
                      <div>
-                       <h4 class="text-xs font-bold text-gray-800 line-clamp-2 leading-snug mb-1 cursor-pointer" onclick="openProductDetail('\${item.id}')">\${item.name}</h4>
-                       <span class="text-sm font-black text-gray-900">\${formatter.format(currentPrice)}</span>
+                       <h4 class="text-xs font-bold text-gray-900 dark:text-white line-clamp-2 leading-snug mb-1 cursor-pointer" onclick="openProductDetail('\${item.id}')">\${item.name}</h4>
+                       <span class="text-sm font-black text-gray-900 dark:text-white">\${formatter.format(currentPrice)}</span>
                      </div>
                      <div class="mt-3 flex justify-between items-end">
-                       <span class="text-[9px] font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">Stok: \${item.stock}</span>
+                       <span class="text-[9px] font-medium text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">Sisa: \${item.stock}</span>
                        \${btnHtml}
                      </div>
                    </div>
@@ -666,7 +660,7 @@ export default createRoute(async (c) => {
           showToast(name + ' ditambahkan ke keranjang');
         }
 
-        // --- 6. LOGIKA MODAL DETAIL PRODUK & KUSTOMISASI JSON ---
+        // --- 6. LOGIKA MODAL BOTTOM SHEET DETAIL PRODUK & KUSTOMISASI (SPOILER) ---
         function openProductDetail(id) {
           const item = PRODUCTS.find(p => p.id === id);
           if(!item) return;
@@ -690,6 +684,7 @@ export default createRoute(async (c) => {
              orig.classList.add('hidden');
           }
 
+          // Build UI untuk opsi kustomisasi (Parse JSON) dengan gaya Spoiler (Details/Summary)
           const container = document.getElementById('pdm-custom-container');
           container.innerHTML = '';
           additionalPrice = 0;
@@ -698,26 +693,36 @@ export default createRoute(async (c) => {
              try {
                 const options = JSON.parse(item.custom_options);
                 options.forEach((optGroup, groupIdx) => {
-                   let html = \`<div class="mb-4">
-                       <div class="flex justify-between items-baseline mb-3">
-                         <h4 class="font-black text-gray-800 text-sm">\${optGroup.title || optGroup.name}</h4>
-                         \${optGroup.is_required ? '<span class="text-[9px] font-bold bg-[#ee4d2d]/10 text-[#ee4d2d] px-1.5 py-0.5 rounded">Wajib</span>' : '<span class="text-[9px] font-medium text-gray-400">Opsional</span>'}
-                       </div>\`;
+                   let html = \`
+                     <details class="group border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-800 transition-all duration-300 shadow-sm" open>
+                       <summary class="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-700/50 cursor-pointer select-none outline-none">
+                         <div class="flex items-center gap-2">
+                           <h4 class="font-black text-gray-900 dark:text-white text-sm">\${optGroup.title || optGroup.name}</h4>
+                           \${optGroup.is_required || optGroup.required ? '<span class="text-[9px] font-bold bg-orange-100 dark:bg-[#ee4d2d]/20 text-[#ee4d2d] px-1.5 py-0.5 rounded">Wajib</span>' : '<span class="text-[9px] font-medium text-gray-500 dark:text-gray-400">Opsional</span>'}
+                         </div>
+                         <svg class="w-5 h-5 text-gray-400 dark:text-gray-500 transform group-open:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                       </summary>
+                       <div class="p-3 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">
+                   \`;
 
-                   optGroup.choices.forEach((opt, optIdx) => {
+                   // Render array menu/opsi
+                   const choices = optGroup.choices || optGroup.options || [];
+                   choices.forEach((opt, optIdx) => {
                      const inputType = optGroup.type === 'radio' ? 'radio' : 'checkbox';
                      const inputName = \`custom_\${groupIdx}\`;
                      const priceText = opt.price > 0 ? \`+ \${formatter.format(opt.price)}\` : 'Gratis';
                      
-                     html += \`<label class="flex items-center justify-between p-3 border border-gray-100 rounded-xl mb-2 cursor-pointer hover:bg-gray-50 transition-colors">
+                     html += \`
+                       <label class="flex items-center justify-between py-3 px-2 border-b border-gray-50 dark:border-gray-700/50 last:border-0 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors rounded-lg">
                          <div class="flex items-center gap-3">
-                           <input type="\${inputType}" name="\${inputName}" value="\${opt.price}" class="w-4 h-4 text-[#ee4d2d] focus:ring-[#ee4d2d] border-gray-300 \${inputType==='radio'?'rounded-full':'rounded'}" onchange="recalculateModalPrice()">
-                           <span class="text-sm font-semibold text-gray-700">\${opt.name}</span>
+                           <input type="\${inputType}" name="\${inputName}" value="\${opt.price}" class="w-4 h-4 text-[#ee4d2d] bg-white dark:bg-gray-700 focus:ring-[#ee4d2d] border-gray-300 dark:border-gray-600 \${inputType==='radio'?'rounded-full':'rounded'}" onchange="recalculateModalPrice()">
+                           <span class="text-sm font-semibold text-gray-700 dark:text-gray-200">\${opt.name}</span>
                          </div>
-                         <span class="text-xs font-bold text-gray-500">\${priceText}</span>
-                       </label>\`;
+                         <span class="text-xs font-bold text-gray-500 dark:text-gray-400">\${priceText}</span>
+                       </label>
+                     \`;
                    });
-                   html += '</div>';
+                   html += '</div></details>';
                    container.innerHTML += html;
                 });
              } catch(e) { console.error("Gagal parsing custom JSON", e); }
@@ -728,6 +733,7 @@ export default createRoute(async (c) => {
           const modal = document.getElementById('product-detail-modal');
           const inner = document.getElementById('pdm-inner');
           modal.classList.remove('hidden');
+          modal.classList.add('flex');
           setTimeout(() => {
             modal.classList.remove('opacity-0');
             inner.classList.remove('translate-y-full');
@@ -739,7 +745,7 @@ export default createRoute(async (c) => {
           const inner = document.getElementById('pdm-inner');
           modal.classList.add('opacity-0');
           inner.classList.add('translate-y-full');
-          setTimeout(() => modal.classList.add('hidden'), 300);
+          setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
         }
 
         function updateQty(delta) {
@@ -760,7 +766,19 @@ export default createRoute(async (c) => {
 
         function submitProductToCart() {
            const finalPrice = (basePrice + additionalPrice) * currentQty;
-           addToCart(currentActiveProduct.id, currentActiveProduct.name, finalPrice);
+           // Tambah jumlah berdasarkan Quantity yang dipilih di modal
+           for(let i=0; i < currentQty; i++){
+              cartItems += 1;
+              cartTotal += (basePrice + additionalPrice);
+           }
+           
+           const badge = document.getElementById('nav-cart-badge');
+           badge.innerText = cartItems;
+           badge.classList.remove('hidden');
+           badge.style.transform = 'scale(1.4)';
+           setTimeout(() => badge.style.transform = 'scale(1)', 200);
+
+           showToast(currentActiveProduct.name + ' ditambahkan ke pesanan!');
            closeProductDetail();
         }
 
