@@ -17,29 +17,28 @@ uploadRouter.post('/', async (c) => {
   }
 
   try {
-    // 1. Buat Timestamp Detik Ini
     const timestamp = Math.floor(Date.now() / 1000).toString();
+    const folderName = 'food_delivery';
 
-    // 2. Buat Signature Autentikasi Cloudinary (Web Crypto API)
-    // Algoritma Wajib Cloudinary: SHA-1 dari string: timestamp={timestamp}{api_secret}
-    const signatureString = `timestamp=${timestamp}${API_SECRET}`;
+    // 1. Pembuatan Signature Cloudinary (WAJIB Urut Abjad)
+    // Aturan Cloudinary: Parameter harus diurutkan secara alfabet. (f)older baru (t)imestamp
+    const signatureString = `folder=${folderName}&timestamp=${timestamp}${API_SECRET}`;
+    
     const encoder = new TextEncoder();
     const data = encoder.encode(signatureString);
     const hashBuffer = await crypto.subtle.digest('SHA-1', data);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     const signature = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 
-    // 3. Siapkan FormData persis seperti dokumen Cloudinary REST API
+    // 2. Siapkan FormData
     const formData = new FormData();
     formData.append('file', file);
     formData.append('api_key', API_KEY);
+    formData.append('folder', folderName); // Harus sama persis dengan yang di-signature
     formData.append('timestamp', timestamp);
     formData.append('signature', signature);
     
-    // (Opsional) Pisahkan di dalam folder Cloudinary agar rapi
-    formData.append('folder', 'food_delivery'); 
-
-    // 4. Lakukan POST Transmisi Biner ke Server Cloudinary
+    // 3. Eksekusi Upload ke Cloudinary
     const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
     
     const response = await fetch(cloudinaryUrl, {
@@ -50,12 +49,12 @@ uploadRouter.post('/', async (c) => {
     const result = await response.json() as any;
 
     if (!response.ok || result.error) {
-      console.error("Cloudinary Error:", result.error);
-      return c.json({ success: false, message: 'Gagal mengunggah gambar ke Cloudinary' }, 500);
+      console.error("Cloudinary Error Log:", result.error);
+      return c.json({ success: false, message: result.error?.message || 'Gagal mengunggah gambar' }, 500);
     }
 
-    // 5. Kembalikan Tautan Optimal Cloudinary ke Aplikasi Klien (Frontend)
-    // Parameter f_auto dan q_auto akan merampingkan gambar otomatis di CDN
+    // 4. Outputkan URL yang Teroptimasi 
+    // Menyisipkan /f_auto,q_auto/ di antara /upload/ agar ukuran gambar ringan
     const optimizedUrl = result.secure_url.replace('/upload/', '/upload/f_auto,q_auto/');
 
     return c.json({
@@ -66,7 +65,7 @@ uploadRouter.post('/', async (c) => {
     });
 
   } catch (error: any) {
-    console.error("Kesalahan Unggah:", error);
+    console.error("Kesalahan Sistem:", error);
     return c.json({ success: false, message: 'Terjadi kesalahan sistem saat unggah gambar.' }, 500);
   }
 });
