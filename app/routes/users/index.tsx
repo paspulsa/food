@@ -34,28 +34,45 @@ export default createRoute(async (c) => {
   // ==========================================
   // 2. TARIK DATA DARI DATABASE (Katalog, Menu, dan Promo Banner)
   // ==========================================
+  // Kategori Aktif
   const { results: categories } = await c.env.DB.prepare(
     'SELECT id, name, image FROM menu_categories WHERE is_active = 1 ORDER BY sort_order ASC LIMIT 12'
   ).all();
 
-  // Tarik data menu dengan tambahan field `is_custom` dan `custom_options`
-  const { results: promoItems } = await c.env.DB.prepare(
-    'SELECT id, name, description, price, promo_price, is_promo, image, stock, is_available, is_custom, custom_options FROM menu_items WHERE is_available = 1 AND is_promo = 1 ORDER BY created_at DESC LIMIT 6'
-  ).all();
-
-  const { results: recommendedItems } = await c.env.DB.prepare(
-    'SELECT id, name, description, price, promo_price, is_promo, image, stock, is_available, is_custom, custom_options FROM menu_items WHERE is_available = 1 AND is_promo = 0 ORDER BY created_at DESC LIMIT 10'
-  ).all();
-
+  // Banner Promo (Tipe BANNER)
   const { results: appPromos } = await c.env.DB.prepare(
-    'SELECT image, action_url FROM app_promos WHERE is_active = 1 ORDER BY created_at DESC'
+    "SELECT image, action_url FROM app_promos WHERE type = 'BANNER' AND is_active = 1 ORDER BY created_at DESC"
+  ).all();
+
+  // Modal Promo (Tipe MODAL) - Ambil 1 saja yang terbaru
+  const modalPromo = await c.env.DB.prepare(
+    "SELECT image, action_url FROM app_promos WHERE type = 'MODAL' AND is_active = 1 ORDER BY created_at DESC"
+  ).first<any>();
+
+  // Flash Sale / Promo Items (is_promo = 1)
+  const { results: promoItems } = await c.env.DB.prepare(
+    'SELECT id, category_id, name, description, price, promo_price, is_promo, image, stock, is_available, is_custom, custom_options FROM menu_items WHERE is_available = 1 AND is_promo = 1 ORDER BY created_at DESC LIMIT 6'
+  ).all();
+
+  // Best Sellers / Paling Laku (Berdasarkan sold_count)
+  const { results: bestSellers } = await c.env.DB.prepare(
+    'SELECT id, category_id, name, description, price, promo_price, is_promo, image, stock, is_available, is_custom, custom_options, sold_count FROM menu_items WHERE is_available = 1 ORDER BY sold_count DESC, created_at DESC LIMIT 10'
+  ).all();
+
+  // Rekomendasi (is_promo = 0)
+  const { results: recommendedItems } = await c.env.DB.prepare(
+    'SELECT id, category_id, name, description, price, promo_price, is_promo, image, stock, is_available, is_custom, custom_options FROM menu_items WHERE is_available = 1 AND is_promo = 0 ORDER BY created_at DESC LIMIT 10'
+  ).all();
+
+  // TARIK SEMUA PRODUK: Digunakan untuk fungsi filter kategori instan tanpa load URL
+  const { results: allAvailableItems } = await c.env.DB.prepare(
+    'SELECT id, category_id, name, description, price, promo_price, is_promo, image, stock, is_available, is_custom, custom_options FROM menu_items WHERE is_available = 1 ORDER BY created_at DESC'
   ).all();
 
   const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 
-  // Serialisasi data produk untuk dipakai oleh script JS di client-side
-  const allProductsData = [...promoItems, ...recommendedItems];
-  const safeItemsJson = JSON.stringify(allProductsData).replace(/</g, '\\u003c');
+  // Serialisasi SELURUH data produk agar JS di frontend bisa mem-filter dengan cepat
+  const safeItemsJson = JSON.stringify(allAvailableItems).replace(/</g, '\\u003c');
 
   return c.render(
     <div class="bg-gray-100 min-h-screen font-sans">
@@ -63,12 +80,16 @@ export default createRoute(async (c) => {
         __html: `
           .hide-scrollbar::-webkit-scrollbar { display: none; }
           .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+          html { scroll-behavior: smooth; }
+          .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
         `
       }} />
 
       <div class="max-w-md mx-auto bg-gray-50 min-h-screen relative shadow-2xl pb-24 overflow-x-hidden">
         
-        {/* HEADER & SEARCH BAR */}
+        {/* =========================================================
+            HEADER & SEARCH BAR
+            ========================================================= */}
         <div class="bg-gradient-to-b from-[#ee4d2d] to-[#ff7337] px-4 pt-6 pb-4 rounded-b-2xl shadow-sm text-white">
           <div class="flex justify-between items-center mb-4">
             <div class="max-w-[80%] cursor-pointer group" onclick="promptManualLocation()">
@@ -92,31 +113,34 @@ export default createRoute(async (c) => {
           </div>
         </div>
 
-        {/* KONTEN UTAMA */}
         <div class="w-full">
           
-          {/* BANNER PROMO */}
+          {/* =========================================================
+              BANNER PROMO SLIDER DINAMIS
+              ========================================================= */}
           {appPromos.length > 0 && (
             <div class="px-4 mt-4">
               <div class="flex overflow-x-auto snap-x snap-mandatory gap-3 hide-scrollbar pb-2">
                 {appPromos.map((promo: any) => (
-                  <a href={promo.action_url || '#'} class="snap-center shrink-0 w-[85%] sm:w-[280px] block">
-                    <img src={promo.image} class="w-full h-32 object-cover rounded-2xl shadow-sm border border-gray-100" alt="Promo App" />
+                  <a href={promo.action_url || '#'} class="snap-center shrink-0 w-[85%] sm:w-[280px] block transform hover:scale-[1.02] transition-transform">
+                    <img src={promo.image} class="w-full h-32 object-cover rounded-2xl shadow-sm border border-gray-100 bg-gray-200" alt="Promo App" />
                   </a>
                 ))}
               </div>
             </div>
           )}
 
-          {/* KATEGORI GRID (6 Kolom) */}
+          {/* =========================================================
+              KATEGORI GRID (Trigger Filter Instan)
+              ========================================================= */}
           <div class="px-4 mt-4">
             <div class="grid grid-cols-6 gap-y-4 gap-x-1 sm:gap-x-2">
               {categories.length > 0 ? categories.map((cat: any) => (
-                <div class="flex flex-col items-center gap-1.5 cursor-pointer group">
+                <div class="flex flex-col items-center gap-1.5 cursor-pointer group" onclick={`showCategory('${cat.id}', '${cat.name.replace(/'/g, "\\'")}')`}>
                   <div class="w-[46px] h-[46px] sm:w-[50px] sm:h-[50px] bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center p-1.5 group-hover:bg-orange-50 transition overflow-hidden">
                     <img src={cat.image || `https://ui-avatars.com/api/?name=${cat.name}&background=ee4d2d&color=fff`} class="w-full h-full object-contain" alt={cat.name} />
                   </div>
-                  <span class="text-[9px] text-center font-bold text-gray-700 leading-tight line-clamp-2 px-0.5">{cat.name}</span>
+                  <span class="text-[9px] text-center font-bold text-gray-700 leading-tight line-clamp-2 px-0.5 group-hover:text-[#ee4d2d] transition-colors">{cat.name}</span>
                 </div>
               )) : (
                 <div class="col-span-6 text-center text-xs text-gray-400 py-2">Belum ada kategori.</div>
@@ -126,7 +150,26 @@ export default createRoute(async (c) => {
 
           <div class="h-2 bg-gray-100 mt-6 w-full"></div>
 
-          {/* FLASH SALE / PROMO ITEMS */}
+          {/* =========================================================
+              WADAH DINAMIS KATEGORI (SPA FILTER)
+              ========================================================= */}
+          <div id="dynamic-category-container" class="mt-4 pb-8 hidden animate-fade-in bg-orange-50/30 rounded-xl mx-2 border border-orange-100/50 p-2">
+            <div class="px-2 flex justify-between items-center mb-4 pt-2">
+              <h3 id="dynamic-category-title" class="text-base font-black text-[#ee4d2d] flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
+                <span id="dynamic-category-name">Kategori Pilihan</span>
+              </h3>
+              <button onclick="document.getElementById('dynamic-category-container').classList.add('hidden')" class="text-xs font-bold text-gray-400 bg-gray-200/50 hover:bg-gray-200 px-3 py-1.5 rounded-full transition shadow-sm">
+                Tutup x
+              </button>
+            </div>
+            {/* Grid item kategori yang akan dirender lewat JavaScript */}
+            <div id="dynamic-category-items" class="grid grid-cols-2 gap-3 px-2"></div>
+          </div>
+
+          {/* =========================================================
+              FLASH SALE / PROMO ITEMS
+              ========================================================= */}
           {promoItems.length > 0 && (
             <div class="mt-4">
               <div class="px-4 flex justify-between items-center mb-3">
@@ -146,9 +189,8 @@ export default createRoute(async (c) => {
                     <div class="snap-start shrink-0 w-36 bg-white rounded-xl shadow-sm border border-gray-100 relative flex flex-col overflow-hidden group">
                       <div class="absolute top-0 left-0 bg-[#ee4d2d] text-white text-[10px] font-black px-2 py-0.5 rounded-br-lg z-10 shadow-sm">{discountPercent}% OFF</div>
                       
-                      {/* Buka Popup Saat Gambar Diklik */}
                       <div class="relative h-32 w-full bg-gray-50 overflow-hidden cursor-pointer" onclick={`openProductDetail('${item.id}')`}>
-                        <img src={item.image || 'https://via.placeholder.com/150'} class={`w-full h-full object-cover transition-transform ${isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-105'}`} />
+                        <img src={item.image || 'https://via.placeholder.com/150'} class={`w-full h-full object-cover transition-transform duration-500 ${isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-105'}`} />
                         {isOutOfStock && (
                           <div class="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center">
                             <span class="bg-gray-900 text-white text-[10px] font-black px-3 py-1 rounded-full">HABIS</span>
@@ -166,14 +208,12 @@ export default createRoute(async (c) => {
                         </div>
                         <div class="mt-3 flex justify-between items-center">
                           <span class="text-[9px] font-medium text-gray-500">Stok: {item.stock}</span>
-                          
-                          {/* Logika Tombol Custom vs Reguler */}
                           {item.is_custom === 1 ? (
-                            <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[10px] font-bold px-3 py-1.5 rounded-full transition-colors ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
+                            <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm transition-colors ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
                               Pilih
                             </button>
                           ) : (
-                            <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.promo_price})` : undefined} disabled={isOutOfStock} class={`w-6 h-6 rounded-full flex items-center justify-center transition ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
+                            <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.promo_price})` : undefined} disabled={isOutOfStock} class={`w-6 h-6 rounded-full flex items-center justify-center shadow-sm transition-colors active:scale-90 ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
                               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
                             </button>
                           )}
@@ -188,10 +228,73 @@ export default createRoute(async (c) => {
 
           {promoItems.length > 0 && <div class="h-2 bg-gray-100 w-full"></div>}
 
-          {/* REKOMENDASI ITEM TERLARIS */}
+          {/* =========================================================
+              PALING LAKU (BEST SELLERS)
+              ========================================================= */}
+          {bestSellers.length > 0 && (
+            <div class="mt-4 pb-2">
+              <div class="px-4 flex justify-between items-center mb-3">
+                <h3 class="text-base font-black text-gray-800 flex items-center gap-1.5">
+                  <span class="text-xl">🔥</span> Paling Laku di Sekitarmu
+                </h3>
+              </div>
+              
+              <div class="flex overflow-x-auto snap-x snap-mandatory gap-3 px-4 hide-scrollbar pb-4 pt-1">
+                {bestSellers.map((item: any, index: number) => {
+                  const isOutOfStock = item.stock === 0;
+                  const currentPrice = item.is_promo ? item.promo_price : item.price;
+
+                  return (
+                    <div class="snap-start shrink-0 w-40 bg-white rounded-2xl shadow-sm border border-orange-100 relative flex flex-col overflow-hidden group">
+                      <div class="absolute top-0 left-0 bg-gradient-to-r from-orange-500 to-[#ee4d2d] text-white text-[10px] font-black px-2.5 py-1 rounded-br-xl z-10 shadow-sm flex items-center gap-1">
+                        TOP {index + 1}
+                      </div>
+                      
+                      <div class="relative h-32 w-full bg-gray-50 overflow-hidden cursor-pointer" onclick={`openProductDetail('${item.id}')`}>
+                        <img src={item.image || 'https://via.placeholder.com/150'} class={`w-full h-full object-cover transition-transform duration-500 ${isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-110'}`} />
+                        {isOutOfStock && (
+                          <div class="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center">
+                            <span class="bg-gray-900 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-md">HABIS</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div class="p-3 flex flex-col flex-1 justify-between">
+                        <div>
+                          <h4 class="text-xs font-bold text-gray-800 line-clamp-2 leading-snug mb-1 cursor-pointer" onclick={`openProductDetail('${item.id}')`}>{item.name}</h4>
+                          <span class="text-sm font-black text-[#ee4d2d]">{formatter.format(currentPrice)}</span>
+                        </div>
+                        <div class="mt-3 flex justify-between items-center">
+                          <span class="text-[9px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded flex items-center gap-1">
+                            <svg class="w-2.5 h-2.5 text-orange-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"></path></svg>
+                            {item.sold_count} terjual
+                          </span>
+                          {item.is_custom === 1 ? (
+                            <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm transition-colors ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
+                              Pilih
+                            </button>
+                          ) : (
+                            <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${currentPrice})` : undefined} disabled={isOutOfStock} class={`w-6 h-6 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#ee4d2d] text-white'}`}>
+                              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4"></path></svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          <div class="h-2 bg-gray-100 w-full"></div>
+
+          {/* =========================================================
+              REKOMENDASI ITEM (EXPLORE)
+              ========================================================= */}
           <div class="mt-4 pb-8">
             <div class="px-4 flex justify-between items-center mb-3">
-              <h3 class="text-base font-black text-gray-800">Rekomendasi Untukmu</h3>
+              <h3 class="text-base font-black text-gray-800">Eksplor Menu Lainnya</h3>
             </div>
             <div class="grid grid-cols-2 gap-3 px-4">
               {recommendedItems.map((item: any) => {
@@ -199,10 +302,10 @@ export default createRoute(async (c) => {
                 return (
                   <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden group">
                     <div class="relative h-32 w-full bg-gray-50 overflow-hidden cursor-pointer" onclick={`openProductDetail('${item.id}')`}>
-                      <img src={item.image || 'https://via.placeholder.com/150'} class={`w-full h-full object-cover transition-transform ${isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-105'}`} />
+                      <img src={item.image || 'https://via.placeholder.com/150'} class={`w-full h-full object-cover transition-transform duration-500 ${isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-105'}`} />
                       {isOutOfStock && (
                         <div class="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center">
-                          <span class="bg-gray-900 text-white text-[10px] font-black px-3 py-1 rounded-full">HABIS</span>
+                          <span class="bg-gray-900 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-md">HABIS</span>
                         </div>
                       )}
                     </div>
@@ -214,13 +317,12 @@ export default createRoute(async (c) => {
                       </div>
                       <div class="mt-3 flex justify-between items-end">
                         <span class="text-[9px] font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">Stok: {item.stock}</span>
-                        
                         {item.is_custom === 1 ? (
-                          <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm transition ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#ee4d2d] text-white hover:bg-orange-700'}`}>
+                          <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm transition-colors ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
                             Pilih
                           </button>
                         ) : (
-                          <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price})` : undefined} disabled={isOutOfStock} class={`w-7 h-7 rounded-full flex items-center justify-center shadow-sm transition ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#ee4d2d] text-white hover:bg-orange-700'}`}>
+                          <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.price})` : undefined} disabled={isOutOfStock} class={`w-7 h-7 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#ee4d2d] text-white hover:bg-orange-700'}`}>
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
                           </button>
                         )}
@@ -234,21 +336,71 @@ export default createRoute(async (c) => {
         </div>
 
         {/* =========================================================
-            MODAL BOTTOM SHEET DETAIL PRODUK & OPSI CUSTOM MENU
+            MODAL BOTTOM SHEET LOKASI
+            ========================================================= */}
+        <div id="location-modal" class="fixed inset-0 z-[100] hidden items-end justify-center bg-black/50 backdrop-blur-sm transition-opacity duration-300 opacity-0">
+          <div id="location-modal-inner" class="w-full max-w-md bg-white rounded-t-3xl shadow-2xl transform translate-y-full transition-transform duration-300 p-6 pb-safe">
+            <div class="flex justify-between items-center mb-6">
+               <h3 class="font-black text-gray-800 text-lg">Alamat Pengiriman</h3>
+               <button onclick="closeLocationModal()" class="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200 transition-colors">
+                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+               </button>
+            </div>
+            
+            <div class="space-y-5">
+               <button id="btn-gps" onclick="detectGPSLocation()" class="w-full flex justify-center items-center gap-2.5 p-3.5 bg-orange-50 text-[#ee4d2d] rounded-2xl font-bold text-sm border border-orange-100 hover:bg-orange-100 transition-colors">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                  Gunakan Lokasi Saat Ini (GPS)
+               </button>
+               
+               <div class="relative">
+                  <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-gray-200"></div></div>
+                  <div class="relative flex justify-center"><span class="bg-white px-4 text-[10px] text-gray-400 font-bold uppercase tracking-widest">Atau Ketik Manual</span></div>
+               </div>
+               
+               <div>
+                  <textarea id="manual-address-input" rows={3} class="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#ee4d2d]/20 focus:border-[#ee4d2d] transition-all font-medium placeholder-gray-400 resize-none" placeholder="Cth: Jl. Sudirman No. 12, RT 01/RW 02, Jakarta Barat..."></textarea>
+               </div>
+               
+               <button onclick="saveManualLocation()" class="w-full bg-[#ee4d2d] text-white font-bold py-3.5 rounded-2xl shadow-lg shadow-[#ee4d2d]/30 hover:bg-orange-700 active:scale-[0.98] transition-all">
+                  Simpan Lokasi
+               </button>
+            </div>
+          </div>
+        </div>
+
+        {/* =========================================================
+            MODAL BANNER POPUP DINAMIS
+            ========================================================= */}
+        {modalPromo && (
+          <div id="promo-modal" class="fixed inset-0 z-[100] hidden items-center justify-center p-6 bg-black/60 backdrop-blur-sm transition-opacity duration-300 opacity-0">
+            <div class="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl overflow-hidden transform scale-95 transition-transform duration-300" id="promo-modal-inner">
+              <button onclick="closePromoModal()" class="absolute top-3 right-3 w-8 h-8 bg-black/30 backdrop-blur rounded-full flex items-center justify-center text-white hover:bg-black/50 transition z-10">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
+              <a href={modalPromo.action_url || '#'}>
+                <img src={modalPromo.image} class="w-full object-cover" alt="Spesial Promo" />
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================
+            MODAL BOTTOM SHEET DETAIL PRODUK & KUSTOMISASI JSON
             ========================================================= */}
         <div id="product-detail-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] hidden flex flex-col justify-end opacity-0 transition-opacity duration-300">
           <div class="bg-white w-full max-w-md mx-auto rounded-t-3xl max-h-[85vh] flex flex-col transform translate-y-full transition-transform duration-300" id="pdm-inner">
             
             <div class="relative h-56 bg-gray-100 rounded-t-3xl flex-shrink-0">
               <img id="pdm-image" src="" class="w-full h-full object-cover rounded-t-3xl" />
-              <button onclick="closeProductDetail()" class="absolute top-4 right-4 w-8 h-8 bg-black/40 text-white rounded-full flex items-center justify-center backdrop-blur-md">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              <button onclick="closeProductDetail()" class="absolute top-4 right-4 w-8 h-8 bg-black/40 text-white rounded-full flex items-center justify-center backdrop-blur-md hover:bg-black/60 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
               </button>
             </div>
 
             <div class="p-5 overflow-y-auto flex-1 hide-scrollbar">
               <h2 id="pdm-name" class="text-xl font-black text-gray-800 leading-tight"></h2>
-              <p id="pdm-desc" class="text-sm text-gray-500 mt-2 line-clamp-3"></p>
+              <p id="pdm-desc" class="text-sm text-gray-500 mt-2 leading-relaxed"></p>
               <div class="mt-3 flex items-center gap-2">
                  <span id="pdm-price" class="text-lg font-black text-[#ee4d2d]"></span>
                  <span id="pdm-original-price" class="text-xs font-bold text-gray-400 line-through hidden"></span>
@@ -258,11 +410,11 @@ export default createRoute(async (c) => {
               <div id="pdm-custom-container" class="mt-6 space-y-5 border-t border-gray-100 pt-5"></div>
             </div>
 
-            <div class="p-4 border-t border-gray-100 bg-white flex items-center gap-4 flex-shrink-0 pb-safe">
+            <div class="p-4 border-t border-gray-100 bg-white flex items-center gap-4 flex-shrink-0 pb-safe shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]">
               <div class="flex items-center bg-gray-100 rounded-xl px-1">
-                <button onclick="updateQty(-1)" class="w-10 h-10 flex items-center justify-center text-gray-600 font-black text-lg">-</button>
+                <button onclick="updateQty(-1)" class="w-10 h-10 flex items-center justify-center text-gray-600 font-black text-lg hover:bg-gray-200 rounded-l-xl transition">-</button>
                 <span id="pdm-qty" class="w-6 text-center font-black">1</span>
-                <button onclick="updateQty(1)" class="w-10 h-10 flex items-center justify-center text-[#ee4d2d] font-black text-lg">+</button>
+                <button onclick="updateQty(1)" class="w-10 h-10 flex items-center justify-center text-[#ee4d2d] font-black text-lg hover:bg-gray-200 rounded-r-xl transition">+</button>
               </div>
               <button id="pdm-add-btn" class="flex-1 bg-[#ee4d2d] text-white py-3.5 rounded-xl font-bold shadow-md shadow-orange-500/30 active:scale-95 transition-transform flex items-center justify-center gap-2" onclick="submitProductToCart()">
                 <span>Tambah</span>
@@ -273,7 +425,9 @@ export default createRoute(async (c) => {
           </div>
         </div>
 
-        {/* BOTTOM NAVIGATION BAR (FIXED) */}
+        {/* =========================================================
+            BOTTOM NAVIGATION BAR (FIXED)
+            ========================================================= */}
         <div class="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white border-t border-gray-200 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.08)] z-[40]">
           <div class="flex justify-around items-center h-[60px] px-2 pb-safe">
             <a href="/users" class="flex flex-col items-center gap-1 text-[#ee4d2d]">
@@ -293,36 +447,20 @@ export default createRoute(async (c) => {
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
               <span class="text-[10px] font-semibold">Order</span>
             </a>
-            <a href="/login" class="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition">
+            <a href="/users/login" class="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
               <span class="text-[10px] font-semibold">Profile</span>
             </a>
           </div>
         </div>
 
-        {/* MODAL INPUT LOKASI (CUSTOM UI) */}
-        <div id="location-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
-          <div class="bg-white rounded-3xl w-full max-w-sm p-6 shadow-2xl transform scale-95 transition-transform duration-300" id="location-modal-inner">
-            <h3 class="text-lg font-black text-gray-800 mb-2">Pilih Titik Pengantaran</h3>
-            <p class="text-xs text-gray-500 mb-4">Masukkan alamat lengkap agar pesanan Anda dapat diantar dengan tepat waktu.</p>
-            
-            <textarea 
-              id="manual-address-input" 
-              rows={3} 
-              class="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl text-sm text-gray-800 focus:ring-2 focus:ring-[#ee4d2d] focus:border-[#ee4d2d] outline-none transition-all mb-5 resize-none" 
-              placeholder="Contoh: Jl. Merdeka No. 12, RT 01/02..."
-            ></textarea>
-            
-            <div class="flex gap-3">
-              <button onclick="closeLocationModal()" class="flex-1 py-3 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors text-sm">Batal</button>
-              <button onclick="saveManualLocation()" class="flex-1 py-3 rounded-xl font-bold text-white bg-[#ee4d2d] hover:bg-[#d64124] transition-colors text-sm shadow-md shadow-orange-500/30">Simpan Lokasi</button>
-            </div>
-          </div>
-        </div>
       </div>
 
-      {/* SCRIPT INTERAKTIF */}
+      {/* =========================================================
+          SCRIPT INTERAKTIF LENGKAP (CLIENT-SIDE)
+          ========================================================= */}
       <script dangerouslySetInnerHTML={{ __html: `
+        // DATA GLOBAL DARI SERVER
         const DB_ADDRESS = \`${userAddress}\`;
         const PRODUCTS = ${safeItemsJson};
         const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
@@ -330,12 +468,25 @@ export default createRoute(async (c) => {
         let cartItems = 0;
         let cartTotal = 0;
         
+        // VARIABEL STATE UNTUK MODAL DETAIL PRODUK
         let currentActiveProduct = null;
         let currentQty = 1;
         let basePrice = 0;
         let additionalPrice = 0;
         
-        // --- LOGIKA LOKASI (Tetap sama) ---
+        // --- 1. LOGIKA TOAST / NOTIFIKASI ---
+        function showToast(msg, isError = false) {
+          const toast = document.createElement('div');
+          toast.className = \`fixed bottom-24 left-1/2 transform -translate-x-1/2 backdrop-blur-md text-white text-[11px] font-bold px-5 py-3 rounded-full shadow-2xl z-[150] flex items-center gap-2 transition-all duration-300 opacity-0 translate-y-4 border \${isError ? 'bg-red-600/95 border-red-500' : 'bg-gray-900/95 border-gray-800'}\`;
+          toast.innerHTML = isError 
+            ? '<svg class="w-4 h-4 text-red-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> ' + msg
+            : '<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg> ' + msg;
+          document.body.appendChild(toast);
+          setTimeout(() => toast.classList.remove('opacity-0', 'translate-y-4'), 10);
+          setTimeout(() => { toast.classList.add('opacity-0', 'translate-y-4'); setTimeout(() => toast.remove(), 300); }, 2500);
+        }
+
+        // --- 2. LOGIKA LOKASI & MODAL LOKASI ---
         function initLocation() {
           const locElement = document.getElementById('user-location');
           const arrowIcon = '<svg class="w-4 h-4 ml-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>';
@@ -381,16 +532,18 @@ export default createRoute(async (c) => {
           const input = document.getElementById('manual-address-input');
           const currentAddress = localStorage.getItem('user_saved_address') || '';
           input.value = (DB_ADDRESS && DB_ADDRESS.trim() !== '') ? DB_ADDRESS : currentAddress;
+          
           modal.classList.remove('hidden');
-          setTimeout(() => { modal.classList.remove('opacity-0'); inner.classList.remove('scale-95'); }, 10);
+          modal.classList.add('flex');
+          setTimeout(() => { modal.classList.remove('opacity-0'); inner.classList.remove('translate-y-full'); }, 10);
         }
 
         function closeLocationModal() {
           const modal = document.getElementById('location-modal');
           const inner = document.getElementById('location-modal-inner');
           modal.classList.add('opacity-0');
-          inner.classList.add('scale-95');
-          setTimeout(() => modal.classList.add('hidden'), 300);
+          inner.classList.add('translate-y-full');
+          setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
         }
 
         function saveManualLocation() {
@@ -399,37 +552,128 @@ export default createRoute(async (c) => {
             localStorage.setItem('user_saved_address', val);
             document.getElementById('user-location').innerHTML = \`<span class="truncate">\${val}</span> <svg class="w-4 h-4 ml-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>\`;
             closeLocationModal();
+            showToast('Alamat berhasil disimpan');
           } else {
-            const inner = document.getElementById('location-modal-inner');
-            inner.style.transform = 'translateX(5px)';
-            setTimeout(() => inner.style.transform = 'translateX(-5px)', 50);
-            setTimeout(() => inner.style.transform = 'translateX(5px)', 100);
-            setTimeout(() => inner.style.transform = 'scale(1)', 150);
+            showToast('Harap isi alamat dengan lengkap!', true);
           }
         }
 
-        // --- LOGIKA KERANJANG STANDAR ---
+        function detectGPSLocation() {
+          const btn = document.getElementById('btn-gps');
+          const originalHtml = btn.innerHTML;
+          btn.innerHTML = '<svg class="animate-spin w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Melacak posisi...';
+          
+          if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+              async (position) => {
+                try {
+                  const res = await fetch(\`https://nominatim.openstreetmap.org/reverse?format=json&lat=\${position.coords.latitude}&lon=\${position.coords.longitude}&zoom=16\`);
+                  const data = await res.json();
+                  let streetName = data.address.road || data.address.suburb || data.display_name.split(',')[0];
+                  localStorage.setItem('user_saved_address', streetName);
+                  document.getElementById('user-location').innerHTML = \`<span class="truncate">\${streetName}</span> <svg class="w-4 h-4 ml-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>\`;
+                  closeLocationModal();
+                  showToast('Lokasi akurat ditemukan!');
+                } catch(e) {
+                  showToast('Gagal memuat alamat dari GPS.', true);
+                } finally { btn.innerHTML = originalHtml; }
+              }, 
+              (error) => { 
+                showToast('Akses GPS ditolak / Gagal melacak.', true);
+                btn.innerHTML = originalHtml; 
+              }
+            );
+          } else {
+            showToast('Perangkat tidak mendukung GPS', true);
+            btn.innerHTML = originalHtml;
+          }
+        }
+
+        // --- 3. MODAL POPUP PROMO ---
+        function initPromoModal() {
+          const modal = document.getElementById('promo-modal');
+          if (!modal) return;
+          if (!sessionStorage.getItem('promo_seen')) {
+            setTimeout(() => {
+              modal.classList.remove('hidden');
+              modal.classList.add('flex');
+              setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                document.getElementById('promo-modal-inner').classList.remove('scale-95');
+              }, 10);
+            }, 1000);
+          }
+        }
+
+        function closePromoModal() {
+          const modal = document.getElementById('promo-modal');
+          sessionStorage.setItem('promo_seen', 'true');
+          modal.classList.add('opacity-0');
+          document.getElementById('promo-modal-inner').classList.add('scale-95');
+          setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
+        }
+
+        // --- 4. LOGIKA FILTER KATEGORI INSTAN (SPA) ---
+        function showCategory(categoryId, categoryName) {
+          const container = document.getElementById('dynamic-category-container');
+          const titleName = document.getElementById('dynamic-category-name');
+          const itemsBox = document.getElementById('dynamic-category-items');
+
+          const filtered = PRODUCTS.filter(p => p.category_id === categoryId);
+          titleName.innerText = categoryName;
+
+          if (filtered.length === 0) {
+             itemsBox.innerHTML = '<div class="col-span-2 text-center py-10 bg-white rounded-xl border border-orange-100 shadow-sm"><p class="text-sm font-bold text-gray-400">Belum ada menu di kategori ini.</p></div>';
+          } else {
+             itemsBox.innerHTML = filtered.map(item => {
+               const isOutOfStock = item.stock === 0;
+               const currentPrice = item.is_promo ? item.promo_price : item.price;
+               const imgClass = isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-105';
+               const outOfStockOverlay = isOutOfStock ? '<div class="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center"><span class="bg-gray-900 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-md">HABIS</span></div>' : '';
+
+               const btnHtml = item.is_custom === 1
+                 ? \`<button onclick="\${!isOutOfStock ? \`openProductDetail('\${item.id}')\` : ''}" \${isOutOfStock ? 'disabled' : ''} class="text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm transition-colors \${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}">Pilih</button>\`
+                 : \`<button onclick="\${!isOutOfStock ? \`addToCart('\${item.id}', '\${item.name.replace(/'/g, "\\\\'")}', \${currentPrice})\` : ''}" \${isOutOfStock ? 'disabled' : ''} class="w-7 h-7 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 \${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#ee4d2d] text-white'}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg></button>\`;
+
+               return \`
+                 <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden group">
+                   <div class="relative h-32 w-full bg-gray-50 overflow-hidden cursor-pointer" onclick="openProductDetail('\${item.id}')">
+                     <img src="\${item.image || 'https://via.placeholder.com/150'}" class="w-full h-full object-cover transition-transform duration-500 \${imgClass}" />
+                     \${outOfStockOverlay}
+                   </div>
+                   <div class="p-3 flex flex-col flex-1 justify-between">
+                     <div>
+                       <h4 class="text-xs font-bold text-gray-800 line-clamp-2 leading-snug mb-1 cursor-pointer" onclick="openProductDetail('\${item.id}')">\${item.name}</h4>
+                       <span class="text-sm font-black text-gray-900">\${formatter.format(currentPrice)}</span>
+                     </div>
+                     <div class="mt-3 flex justify-between items-end">
+                       <span class="text-[9px] font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">Stok: \${item.stock}</span>
+                       \${btnHtml}
+                     </div>
+                   </div>
+                 </div>
+               \`;
+             }).join('');
+          }
+
+          container.classList.remove('hidden');
+          setTimeout(() => { container.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
+        }
+
+        // --- 5. LOGIKA KERANJANG STANDAR ---
         function addToCart(id, name, price) {
           cartItems += 1;
+          cartTotal += price;
           const badge = document.getElementById('nav-cart-badge');
           badge.innerText = cartItems;
           badge.classList.remove('hidden');
           badge.style.transform = 'scale(1.4)';
           setTimeout(() => badge.style.transform = 'scale(1)', 200);
 
-          showToast(name + ' masuk keranjang!');
+          showToast(name + ' ditambahkan ke keranjang');
         }
 
-        function showToast(msg) {
-          const toast = document.createElement('div');
-          toast.className = 'fixed bottom-24 left-1/2 transform -translate-x-1/2 bg-gray-900/90 backdrop-blur-sm border border-gray-800 text-white text-[11px] font-bold px-5 py-3 rounded-full shadow-2xl z-[100] flex items-center gap-2 transition-all duration-300 opacity-0 translate-y-4';
-          toast.innerHTML = '<svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path></svg> ' + msg;
-          document.body.appendChild(toast);
-          setTimeout(() => toast.classList.remove('opacity-0', 'translate-y-4'), 10);
-          setTimeout(() => { toast.classList.add('opacity-0', 'translate-y-4'); setTimeout(() => toast.remove(), 300); }, 2000);
-        }
-
-        // --- LOGIKA MODAL DETAIL PRODUK & KUSTOMISASI JSON ---
+        // --- 6. LOGIKA MODAL DETAIL PRODUK & KUSTOMISASI JSON ---
         function openProductDetail(id) {
           const item = PRODUCTS.find(p => p.id === id);
           if(!item) return;
@@ -453,7 +697,6 @@ export default createRoute(async (c) => {
              orig.classList.add('hidden');
           }
 
-          // Build UI untuk opsi kustomisasi (Parse JSON dari DB)
           const container = document.getElementById('pdm-custom-container');
           container.innerHTML = '';
           additionalPrice = 0;
@@ -464,11 +707,11 @@ export default createRoute(async (c) => {
                 options.forEach((optGroup, groupIdx) => {
                    let html = \`<div class="mb-4">
                        <div class="flex justify-between items-baseline mb-3">
-                         <h4 class="font-black text-gray-800 text-sm">\${optGroup.title}</h4>
-                         \${optGroup.required ? '<span class="text-[9px] font-bold bg-[#ee4d2d]/10 text-[#ee4d2d] px-1.5 py-0.5 rounded">Wajib</span>' : '<span class="text-[9px] font-medium text-gray-400">Opsional</span>'}
+                         <h4 class="font-black text-gray-800 text-sm">\${optGroup.title || optGroup.name}</h4>
+                         \${optGroup.is_required ? '<span class="text-[9px] font-bold bg-[#ee4d2d]/10 text-[#ee4d2d] px-1.5 py-0.5 rounded">Wajib</span>' : '<span class="text-[9px] font-medium text-gray-400">Opsional</span>'}
                        </div>\`;
 
-                   optGroup.options.forEach((opt, optIdx) => {
+                   optGroup.choices.forEach((opt, optIdx) => {
                      const inputType = optGroup.type === 'radio' ? 'radio' : 'checkbox';
                      const inputName = \`custom_\${groupIdx}\`;
                      const priceText = opt.price > 0 ? \`+ \${formatter.format(opt.price)}\` : 'Gratis';
@@ -484,9 +727,7 @@ export default createRoute(async (c) => {
                    html += '</div>';
                    container.innerHTML += html;
                 });
-             } catch(e) {
-                console.error("Gagal parsing custom JSON", e);
-             }
+             } catch(e) { console.error("Gagal parsing custom JSON", e); }
           }
 
           recalculateModalPrice();
@@ -530,7 +771,11 @@ export default createRoute(async (c) => {
            closeProductDetail();
         }
 
-        document.addEventListener('DOMContentLoaded', initLocation);
+        // --- INISIALISASI SAAT DOM DIMUAT ---
+        document.addEventListener('DOMContentLoaded', () => {
+          initLocation();
+          initPromoModal();
+        });
       `}} />
     </div>
   , { title: 'Home - ShopeeFood Clone' })
