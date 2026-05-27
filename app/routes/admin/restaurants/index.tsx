@@ -1,7 +1,7 @@
 import { createRoute } from 'honox/factory'
 
 export default createRoute(async (c) => {
-  // Ambil seluruh data gerai restoran asli beserta data GPS dan tema dari D1
+  // Ambil seluruh data gerai restoran asli dari basis data D1
   const { results: restaurants } = await c.env.DB.prepare(
     'SELECT id, name, address, phone, email, image, isActive, latitude, longitude, theme_color FROM restaurants ORDER BY created_at DESC LIMIT 100'
   ).all();
@@ -12,7 +12,7 @@ export default createRoute(async (c) => {
       <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
         <div>
           <h2 class="text-2xl font-black text-gray-800 tracking-tight">Manajemen Mitra Restoran</h2>
-          <p class="text-gray-500 text-sm mt-1">Kelola lisensi operasional, koordinat GPS, dan identitas visual (tema) gerai mitra.</p>
+          <p class="text-gray-500 text-sm mt-1">Kelola lisensi operasional, koordinat GPS, dan identitas visual setiap gerai mitra.</p>
         </div>
         <button 
           onclick="openRestoModal()"
@@ -28,28 +28,34 @@ export default createRoute(async (c) => {
         <table class="w-full text-left border-collapse">
           <thead>
             <tr class="bg-gray-50/70 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-100">
-              <th class="px-6 py-4 font-semibold">Detail Informasi</th>
-              <th class="px-6 py-4 font-semibold">Koordinat (Lat/Lng)</th>
-              <th class="px-6 py-4 font-semibold">Tema Warna</th>
-              <th class="px-6 py-4 font-semibold">Status</th>
-              <th class="px-6 py-4 text-right font-semibold">Aksi</th>
+              <th class="px-6 py-4 font-semibold">Detail Informasi Gerai</th>
+              <th class="px-6 py-4 font-semibold">Koordinat GPS</th>
+              <th class="px-6 py-4 font-semibold">Identitas Visual (Tema)</th>
+              <th class="px-6 py-4 font-semibold">Status Operasi</th>
+              <th class="px-6 py-4 text-right font-semibold">Aksi Kontrol</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100 text-sm">
             {restaurants.length === 0 ? (
-              <tr><td colspan="5" class="px-6 py-12 text-center text-gray-400 italic">Belum ada mitra restoran terdaftar.</td></tr>
+              <tr>
+                <td colspan="5" class="px-6 py-12 text-center text-gray-400 italic">
+                  Belum ada mitra restoran yang terdaftar di basis data D1.
+                </td>
+              </tr>
             ) : restaurants.map((resto: any) => (
-              <tr class="hover:bg-gray-50/50 transition-colors">
+              <tr class="hover:bg-gray-50/50 transition-colors group">
                 <td class="px-6 py-4 flex items-center gap-4">
-                  <img src={resto.image || 'https://via.placeholder.com/150'} class="w-10 h-10 object-cover rounded-xl shadow-sm border border-gray-100" alt={resto.name} />
+                  <img 
+                    src={resto.image || 'https://via.placeholder.com/150?text=ShopeeFood'} 
+                    class="w-12 h-12 object-cover rounded-xl shadow-sm border border-gray-100 bg-gray-50"
+                    alt={resto.name}
+                  />
                   <div>
-                    <div class="font-bold text-gray-800">{resto.name}</div>
-                    <div class="text-xs text-gray-400 font-mono">{resto.email || '-'}</div>
+                    <div class="font-bold text-gray-800 text-base">{resto.name}</div>
+                    <div class="text-[10px] font-mono text-gray-400 mt-0.5" title={resto.id}>ID: {resto.id.substring(0, 8)}...</div>
                   </div>
                 </td>
-                <td class="px-6 py-4 font-mono text-xs text-gray-600">
-                  {resto.latitude || 0}, {resto.longitude || 0}
-                </td>
+                <td class="px-6 py-4 font-mono text-xs text-gray-600">{resto.latitude || 0}, {resto.longitude || 0}</td>
                 <td class="px-6 py-4">
                   <div class="flex items-center gap-2">
                     <span class="w-4 h-4 rounded-full shadow-inner border border-black/10" style={`background-color: ${resto.theme_color || '#E61010'}`}></span>
@@ -62,8 +68,18 @@ export default createRoute(async (c) => {
                   </span>
                 </td>
                 <td class="px-6 py-4 text-right">
-                  <button onclick={`openRestoModal('${resto.id}', '${resto.name.replace(/'/g, "\\'")}', '${resto.address.replace(/'/g, "\\'")}', '${resto.phone || ''}', '${resto.email || ''}', '${resto.image || ''}', ${resto.latitude || 0}, ${resto.longitude || 0}, '${resto.theme_color || '#E61010'}', ${resto.isActive})`} class="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors">Edit</button>
-                  <button onclick={`deleteRestaurant('${resto.id}', '${resto.name.replace(/'/g, "\\'")}')`} class="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg ml-2 transition-colors">Hapus</button>
+                  <button 
+                    onclick={`openRestoModal('${resto.id}', '${resto.name.replace(/'/g, "\\'")}', '${resto.address.replace(/'/g, "\\'")}', '${resto.phone || ''}', '${resto.email || ''}', '${resto.image || ''}', ${resto.latitude || 0}, ${resto.longitude || 0}, '${resto.theme_color || '#E61010'}', ${resto.isActive})`}
+                    class="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-100 transition-colors"
+                  >
+                    Edit
+                  </button>
+                  <button 
+                    onclick={`deleteRestaurant('${resto.id}', '${resto.name.replace(/'/g, "\\'")}')`}
+                    class="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg border border-red-100 transition-colors ml-2"
+                  >
+                    Hapus
+                  </button>
                 </td>
               </tr>
             ))}
@@ -71,29 +87,34 @@ export default createRoute(async (c) => {
         </table>
       </div>
 
-      {/* MODAL FORM */}
+      {/* --- MODAL DIALOG FORM TAMBAH/EDIT RESTORAN --- */}
       <div id="restoModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform" id="restoModalInner">
-          <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-            <h3 class="font-black text-gray-800" id="modalTitle">Konfigurasi Gerai</h3>
-            <button onclick="closeRestoModal()" class="text-gray-400 hover:text-gray-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform duration-200" id="restoModalInner">
+          <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+            <h3 class="text-lg font-black text-gray-800" id="modalTitle">Konfigurasi Gerai</h3>
+            <button onclick="closeRestoModal()" class="text-gray-400 hover:text-gray-600">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
           </div>
+          
           <form class="p-6 space-y-4" onsubmit="event.preventDefault(); submitRestaurant();">
             <input type="hidden" id="resto_id" />
             <div>
-              <label class="block text-xs font-bold text-gray-500 mb-1">Nama Gerai</label>
-              <input type="text" id="resto_name" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none font-bold text-gray-800 focus:bg-white" required />
+              <label class="block text-sm font-bold text-gray-700 mb-1">Nama Gerai Restoran</label>
+              <input type="text" id="resto_name" placeholder="Contoh: ShopeeFood Kitchen Pusat" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm" required />
             </div>
+            
             <div class="grid grid-cols-2 gap-4">
               <div>
-                <label class="block text-xs font-bold text-gray-500 mb-1">Latitude</label>
-                <input type="number" step="any" id="resto_lat" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none font-mono text-sm" />
+                <label class="block text-sm font-bold text-gray-700 mb-1">Latitude</label>
+                <input type="number" step="any" id="resto_lat" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 outline-none text-sm font-mono" />
               </div>
               <div>
-                <label class="block text-xs font-bold text-gray-500 mb-1">Longitude</label>
-                <input type="number" step="any" id="resto_lng" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl outline-none font-mono text-sm" />
+                <label class="block text-sm font-bold text-gray-700 mb-1">Longitude</label>
+                <input type="number" step="any" id="resto_lng" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 outline-none text-sm font-mono" />
               </div>
             </div>
+
             <div class="p-4 bg-slate-50 rounded-xl border border-gray-200">
               <label class="block text-xs font-black text-gray-700 uppercase tracking-wider mb-2">Tema Visual (White-Labeling)</label>
               <div class="flex items-center gap-3">
@@ -101,47 +122,113 @@ export default createRoute(async (c) => {
                 <span class="text-xs font-mono font-bold text-gray-600">Pilih palet warna tema gerai</span>
               </div>
             </div>
-            <button type="submit" class="w-full bg-primary hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-md transition-colors mt-4">Simpan Konfigurasi Gerai</button>
+
+            <div>
+              <label class="block text-sm font-bold text-gray-700 mb-1">Alamat Operasional Lengkap</label>
+              <textarea id="resto_address" rows={2} class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm" required></textarea>
+            </div>
+            
+            <div class="p-4 bg-slate-50 rounded-xl border border-gray-200">
+              <label class="block text-xs font-black text-gray-700 uppercase tracking-wider mb-1">Upload Logo Gerai (R2 CDN)</label>
+              <input type="file" accept="image/*" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-gray-200 hover:file:bg-gray-300 cursor-pointer" onchange="handleLogoUpload(this)" />
+              <input type="hidden" id="resto_image" />
+              <div id="upload-status" class="hidden"></div>
+            </div>
+
+            <button type="submit" class="w-full bg-primary hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-md transition-colors mt-4">
+              Simpan & Daftarkan Gerai
+            </button>
           </form>
         </div>
       </div>
 
+      {/* RUNTIME EVENT HANDLER CLIENT-SIDE */}
       <script dangerouslySetInnerHTML={{ __html: `
-        function getAuthToken() { return document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1]; }
+        function getAdminToken() {
+          return document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1];
+        }
+
         function openRestoModal(id='', name='', address='', phone='', email='', image='', lat=0, lng=0, theme='#E61010', isActive=1) {
           document.getElementById('modalTitle').innerText = id ? 'Edit Data Gerai' : 'Daftarkan Gerai Baru';
           document.getElementById('resto_id').value = id;
           document.getElementById('resto_name').value = name;
+          document.getElementById('resto_address').value = address;
+          document.getElementById('resto_phone').value = phone;
+          document.getElementById('resto_image').value = image;
           document.getElementById('resto_lat').value = lat;
           document.getElementById('resto_lng').value = lng;
           document.getElementById('resto_theme_color').value = theme;
-          document.getElementById('restoModal').classList.remove('hidden');
+          
+          const modal = document.getElementById('restoModal');
+          const inner = document.getElementById('restoModalInner');
+          modal.classList.remove('hidden');
+          setTimeout(() => inner.classList.remove('scale-95'), 10);
         }
-        function closeRestoModal() { document.getElementById('restoModal').classList.add('hidden'); }
+
+        function closeRestoModal() {
+          const inner = document.getElementById('restoModalInner');
+          inner.classList.add('scale-95');
+          setTimeout(() => document.getElementById('restoModal').classList.add('hidden'), 150);
+        }
+
+        async function handleLogoUpload(input) {
+          const file = input.files[0];
+          if(!file) return;
+          const sb = document.getElementById('upload-status');
+          sb.innerText = 'Mengunggah ke R2 CDN...';
+          sb.className = 'text-xs text-blue-600 font-bold mt-2 block animate-pulse';
+
+          const fd = new FormData();
+          fd.append('file', file);
+          try {
+            const res = await fetch('/api/v1/protected/admin/uploads', {
+              method: 'POST', headers: { 'Authorization': 'Bearer ' + getAdminToken() }, body: fd
+            });
+            const data = await res.json();
+            if(data.success || data.url) {
+              document.getElementById('resto_image').value = data.url || data.filePath;
+              sb.innerText = '✓ Berhasil diunggah ke R2.';
+              sb.className = 'text-xs text-green-600 font-bold mt-2 block';
+            }
+          } catch(e) { sb.innerText = '✕ Gagal upload.'; sb.className = 'text-xs text-red-600 font-bold mt-2 block'; }
+        }
+
         async function submitRestaurant() {
           const id = document.getElementById('resto_id').value;
           const payload = {
             name: document.getElementById('resto_name').value,
-            address: 'N/A', // Placeholder sesuai field db
+            address: document.getElementById('resto_address').value,
+            phone: document.getElementById('resto_phone').value || null,
+            email: document.getElementById('resto_email').value || null,
+            image: document.getElementById('resto_image').value || null,
             latitude: parseFloat(document.getElementById('resto_lat').value),
             longitude: parseFloat(document.getElementById('resto_lng').value),
             theme_color: document.getElementById('resto_theme_color').value,
             isActive: true
           };
+
           const method = id ? 'PUT' : 'POST';
           const endpoint = id ? '/api/v1/protected/admin/restaurants/' + id : '/api/v1/protected/admin/restaurants';
-          const res = await fetch(endpoint, {
-            method: method,
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
-            body: JSON.stringify(payload)
-          });
-          if(res.ok) window.location.reload();
-          else alert('Gagal menyimpan konfigurasi.');
+
+          try {
+            const res = await fetch(endpoint, {
+              method: method,
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAdminToken() },
+              body: JSON.stringify(payload)
+            });
+            if(res.ok) window.location.reload();
+            else alert('Gagal menyimpan konfigurasi.');
+          } catch(e) { alert('Gangguan jaringan.'); }
         }
-        async function deleteRestaurant(id, name) {
-          if(!confirm('Hapus gerai ' + name + '?')) return;
-          await fetch('/api/v1/protected/admin/restaurants/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
-          window.location.reload();
+
+        async function deleteRestaurant(restoId, restoName) {
+          if(!confirm('Hapus gerai ' + restoName + '? Tindakan ini permanen.')) return;
+          try {
+            const res = await fetch('/api/v1/protected/admin/restaurants/' + restoId, {
+              method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getAdminToken() }
+            });
+            if(res.ok) window.location.reload();
+          } catch(e) { alert('Kesalahan server.'); }
         }
       `}} />
     </div>
