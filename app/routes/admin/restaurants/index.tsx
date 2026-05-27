@@ -1,200 +1,200 @@
 import { createRoute } from 'honox/factory'
 
 export default createRoute(async (c) => {
-  // Ambil data termasuk open_time dan close_time dari D1
   const { results: restaurants } = await c.env.DB.prepare(
     'SELECT id, name, address, phone, email, image, isActive, latitude, longitude, theme_color, open_time, close_time FROM restaurants ORDER BY created_at DESC LIMIT 100'
   ).all();
 
   return c.render(
-    <div class="space-y-6 animate-fade-in relative">
-      {/* HEADER ACTION */}
-      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+    <div class="space-y-6 relative">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-darkpanel p-6 rounded-2xl border border-gray-100 dark:border-darkborder shadow-sm">
         <div>
-          <h2 class="text-2xl font-black text-gray-800 tracking-tight">Manajemen Mitra Restoran</h2>
-          <p class="text-gray-500 text-sm mt-1">Kelola lisensi operasional, koordinat GPS, jam operasional, dan identitas visual setiap gerai mitra.</p>
+          <h2 class="text-2xl font-bold text-gray-800 dark:text-white tracking-tight">Manajemen Mitra Restoran</h2>
+          <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">Kelola operasional, koordinat GPS, jam buka, dan identitas visual gerai mitra.</p>
         </div>
         <button 
           onclick="openRestoModal()"
-          class="bg-gradient-to-r from-primary to-orange-500 hover:from-orange-600 hover:to-orange-500 text-white font-bold px-5 py-2.5 rounded-xl shadow-lg shadow-primary/30 transition-all flex items-center gap-2"
+          class="w-full sm:w-auto bg-primary text-white font-bold px-5 py-2.5 rounded-xl shadow-md shadow-primary/20 hover:opacity-90 transition-all flex items-center justify-center gap-2"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
           Tambah Restoran Baru
         </button>
       </div>
 
-      {/* TABEL DATA UTAMA */}
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <table class="w-full text-left border-collapse">
-          <thead>
-            <tr class="bg-gray-50/70 text-gray-400 text-xs uppercase tracking-wider border-b border-gray-100">
-              <th class="px-6 py-4 font-semibold">Detail Informasi Gerai</th>
-              <th class="px-6 py-4 font-semibold">Kontak</th>
-              <th class="px-6 py-4 font-semibold">Jam Operasional</th>
-              <th class="px-6 py-4 font-semibold">Koordinat GPS</th>
-              <th class="px-6 py-4 font-semibold">Tema Warna</th>
-              <th class="px-6 py-4 font-semibold">Status</th>
-              <th class="px-6 py-4 text-right font-semibold">Aksi Kontrol</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100 text-sm">
-            {restaurants.length === 0 ? (
-              <tr>
-                <td colspan="7" class="px-6 py-12 text-center text-gray-400 italic">
-                  Belum ada mitra restoran yang terdaftar di basis data D1.
-                </td>
+      <div class="bg-white dark:bg-darkpanel rounded-2xl border border-gray-100 dark:border-darkborder shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-gray-50/70 dark:bg-darkbg/50 text-gray-400 dark:text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100 dark:border-darkborder">
+                <th class="px-6 py-4 font-semibold">Detail Gerai</th>
+                <th class="px-6 py-4 font-semibold">Kontak</th>
+                <th class="px-6 py-4 font-semibold">Jam Operasional</th>
+                <th class="px-6 py-4 font-semibold">Koordinat GPS</th>
+                <th class="px-6 py-4 font-semibold">Tema Warna</th>
+                <th class="px-6 py-4 font-semibold">Status</th>
+                <th class="px-6 py-4 text-right font-semibold">Aksi Kontrol</th>
               </tr>
-            ) : restaurants.map((resto: any) => (
-              <tr class="hover:bg-gray-50/50 transition-colors group">
-                <td class="px-6 py-4 flex items-center gap-4">
-                  <img 
-                    src={resto.image || 'https://via.placeholder.com/150?text=ShopeeFood'} 
-                    class="w-12 h-12 object-cover rounded-xl shadow-sm border border-gray-100 bg-gray-50"
-                    alt={resto.name}
-                  />
-                  <div>
-                    <div class="font-bold text-gray-800 text-base">{resto.name}</div>
-                    <div class="text-[10px] font-mono text-gray-400 mt-0.5" title={resto.id}>ID: {resto.id.substring(0, 8)}...</div>
-                  </div>
-                </td>
-                <td class="px-6 py-4 text-xs text-gray-600 space-y-0.5">
-                  <div class="font-semibold">{resto.phone || '-'}</div>
-                  <div class="text-gray-400">{resto.email || '-'}</div>
-                </td>
-                {/* KOLOM BARU: JAM OPERASIONAL */}
-                <td class="px-6 py-4 font-mono text-xs text-slate-700">
-                  <span class="bg-slate-100 px-2 py-1 rounded border border-slate-200 block w-max font-bold">
-                    ⏱️ {resto.open_time || '08:00'} - {resto.close_time || '22:00'}
-                  </span>
-                </td>
-                <td class="px-6 py-4 font-mono text-xs text-gray-600">{resto.latitude || 0}, {resto.longitude || 0}</td>
-                <td class="px-6 py-4">
-                  <div class="flex items-center gap-2">
-                    <span class="w-4 h-4 rounded-full shadow-inner border border-black/10" style={`background-color: ${resto.theme_color || '#E61010'}`}></span>
-                    <span class="font-mono text-xs font-bold text-gray-600">{resto.theme_color || '#E61010'}</span>
-                  </div>
-                </td>
-                <td class="px-6 py-4">
-                  <span class={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-black border ${resto.isActive === 1 ? 'bg-green-50 text-green-600 border-green-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
-                    {resto.isActive === 1 ? 'AKTIF' : 'NONAKTIF'}
-                  </span>
-                </td>
-                <td class="px-6 py-4 text-right whitespace-nowrap">
-                  <button 
-                    onclick={`openRestoModal('${resto.id}', '${resto.name.replace(/'/g, "\\'")}', '${resto.address.replace(/'/g, "\\'")}', '${resto.phone || ''}', '${resto.email || ''}', '${resto.image || ''}', ${resto.latitude || 0}, ${resto.longitude || 0}, '${resto.theme_color || '#E61010'}', ${resto.isActive}, '${resto.open_time || '08:00'}', '${resto.close_time || '22:00'}')`}
-                    class="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-100 transition-colors"
-                  >
-                    Edit
-                  </button>
-                  <button 
-                    onclick={`deleteRestaurant('${resto.id}', '${resto.name.replace(/'/g, "\\'")}')`}
-                    class="text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg border border-red-100 transition-colors ml-2"
-                  >
-                    Hapus
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-darkborder text-sm">
+              {restaurants.length === 0 ? (
+                <tr>
+                  <td colspan="7" class="px-6 py-12 text-center text-gray-400 italic bg-white dark:bg-darkpanel">
+                    Belum ada mitra restoran yang terdaftar di basis data D1.
+                  </td>
+                </tr>
+              ) : restaurants.map((resto: any) => (
+                <tr class="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
+                  <td class="px-6 py-4 flex items-center gap-3">
+                    <img 
+                      src={resto.image || 'https://via.placeholder.com/150?text=SPOS'} 
+                      class="w-10 h-10 object-cover rounded-xl border border-gray-100 dark:border-darkborder bg-gray-50 flex-shrink-0"
+                      alt={resto.name}
+                    />
+                    <div class="min-w-0">
+                      <div class="font-bold text-gray-800 dark:text-gray-200 truncate">{resto.name}</div>
+                      <div class="text-[10px] font-mono text-gray-400 dark:text-gray-500 mt-0.5">ID: {resto.id.substring(0, 8)}...</div>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4 text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
+                    <div class="font-semibold">{resto.phone || '-'}</div>
+                    <div class="text-gray-400 dark:text-gray-500">{resto.email || '-'}</div>
+                  </td>
+                  <td class="px-6 py-4 font-mono text-xs">
+                    <span class="bg-gray-50 dark:bg-darkbg px-2.5 py-1 rounded-lg border border-gray-100 dark:border-darkborder text-gray-700 dark:text-gray-300 font-bold">
+                      ⏱️ {resto.open_time || '08:00'} - {resto.close_time || '22:00'}
+                    </span>
+                  </td>
+                  <td class="px-6 py-4 font-mono text-xs text-gray-500 dark:text-gray-400">{resto.latitude || 0}, {resto.longitude || 0}</td>
+                  <td class="px-6 py-4">
+                    <div class="flex items-center gap-2">
+                      <span class="w-4 h-4 rounded-full border border-black/10 shadow-sm" style={`background-color: ${resto.theme_color || '#10b981'}`}></span>
+                      <span class="font-mono text-xs font-bold text-gray-600 dark:text-gray-400">{resto.theme_color || '#10b981'}</span>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4">
+                    <span class={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                      resto.isActive === 1 
+                        ? 'bg-green-50 dark:bg-green-500/10 text-green-600 dark:text-green-400 border-green-100 dark:border-green-500/20' 
+                        : 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border-red-100 dark:border-red-500/20'
+                    }`}>
+                      {resto.isActive === 1 ? 'AKTIF' : 'NONAKTIF'}
+                    </span>
+                  </td>
+                  <td class="px-6 py-4 text-right whitespace-nowrap space-x-1">
+                    <button 
+                      onclick={`openRestoModal('${resto.id}', '${resto.name.replace(/'/g, "\\'")}', '${resto.address.replace(/'/g, "\\'")}', '${resto.phone || ''}', '${resto.email || ''}', '${resto.image || ''}', ${resto.latitude || 0}, ${resto.longitude || 0}, '${resto.theme_color || '#10b981'}', ${resto.isActive}, '${resto.open_time || '08:00'}', '${resto.close_time || '22:00'}')`}
+                      class="text-xs font-bold text-blue-500 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-xl border border-blue-500/10 transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      onclick={`deleteRestaurant('${resto.id}', '${resto.name.replace(/'/g, "\\'")}')`}
+                      class="text-xs font-bold text-red-500 bg-red-500/10 hover:bg-red-500/20 px-3 py-1.5 rounded-xl border border-red-500/10 transition-colors"
+                    >
+                      Hapus
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* --- MODAL DIALOG FORM TAMBAH/EDIT RESTORAN --- */}
-      <div id="restoModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform scale-95 transition-transform duration-200" id="restoModalInner">
-          <div class="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-            <h3 class="text-lg font-black text-gray-800" id="modalTitle">Konfigurasi Gerai</h3>
-            <button onclick="closeRestoModal()" class="text-gray-400 hover:text-gray-600">
+      {/* MODAL DIALOG RESTORAN */}
+      <div id="restoModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-darkpanel rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform scale-95 transition-all duration-200 border dark:border-darkborder" id="restoModalInner">
+          <div class="p-5 border-b border-gray-100 dark:border-darkborder flex justify-between items-center bg-gray-50 dark:bg-darkbg/40">
+            <h3 class="text-lg font-bold text-gray-800 dark:text-white" id="modalTitle">Konfigurasi Gerai</h3>
+            <button onclick="closeRestoModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
           </div>
           
-          <form class="p-6 space-y-4 max-h-[80vh] overflow-y-auto" onsubmit="event.preventDefault(); submitRestaurant();">
+          <form class="p-6 space-y-4 max-h-[75vh] overflow-y-auto" onsubmit="event.preventDefault(); submitRestaurant();">
             <input type="hidden" id="resto_id" />
             
             <div>
-              <label class="block text-sm font-bold text-gray-700 mb-1">Nama Gerai Restoran</label>
-              <input type="text" id="resto_name" placeholder="Contoh: ShopeeFood Kitchen Pusat" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm" required />
+              <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Nama Gerai Restoran</label>
+              <input type="text" id="resto_name" placeholder="Contoh: SPOS Kitchen Pusat" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm focus:border-primary" required />
             </div>
 
             <div class="grid grid-cols-2 gap-4">
               <div>
-                <label class="block text-sm font-bold text-gray-700 mb-1">Nomor Telepon</label>
-                <input type="text" id="resto_phone" placeholder="08123456789" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 outline-none text-sm" />
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Nomor Telepon</label>
+                <input type="text" id="resto_phone" placeholder="08123456" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm" />
               </div>
               <div>
-                <label class="block text-sm font-bold text-gray-700 mb-1">Email Gerai</label>
-                <input type="email" id="resto_email" placeholder="resto@env.com" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 outline-none text-sm" />
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Email Gerai</label>
+                <input type="email" id="resto_email" placeholder="resto@spos.com" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm" />
               </div>
             </div>
 
-            {/* FIELD BARU: JAM BUKA & JAM TUTUP */}
-            <div class="grid grid-cols-2 gap-4 p-4 bg-orange-50/50 rounded-xl border border-orange-100">
+            <div class="grid grid-cols-2 gap-4 p-3 bg-gray-50 dark:bg-darkbg/40 rounded-xl border border-gray-200/60 dark:border-darkborder">
               <div>
-                <label class="block text-xs font-black text-orange-800 uppercase tracking-wider mb-1">⏰ Jam Mulai Buka</label>
-                <input type="time" id="resto_open_time" class="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary/20 outline-none" required />
+                <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">⏰ Jam Buka</label>
+                <input type="time" id="resto_open_time" class="w-full px-3 py-1.5 bg-white dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-lg text-sm font-mono text-gray-800 dark:text-white outline-none" required />
               </div>
               <div>
-                <label class="block text-xs font-black text-orange-800 uppercase tracking-wider mb-1">⏳ Jam Tutup Operasi</label>
-                <input type="time" id="resto_close_time" class="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary/20 outline-none" required />
+                <label class="block text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">⏳ Jam Tutup</label>
+                <input type="time" id="resto_close_time" class="w-full px-3 py-1.5 bg-white dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-lg text-sm font-mono text-gray-800 dark:text-white outline-none" required />
               </div>
             </div>
             
             <div class="grid grid-cols-2 gap-4">
               <div>
-                <label class="block text-sm font-bold text-gray-700 mb-1">Latitude</label>
-                <input type="number" step="any" id="resto_lat" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 outline-none text-sm font-mono" />
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Latitude</label>
+                <input type="number" step="any" id="resto_lat" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm font-mono" />
               </div>
               <div>
-                <label class="block text-sm font-bold text-gray-700 mb-1">Longitude</label>
-                <input type="number" step="any" id="resto_lng" class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 outline-none text-sm font-mono" />
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Longitude</label>
+                <input type="number" step="any" id="resto_lng" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm font-mono" />
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4 p-4 bg-slate-50 rounded-xl border border-gray-200">
+            <div class="grid grid-cols-2 gap-4 p-3 bg-gray-50 dark:bg-darkbg/40 rounded-xl border border-gray-200/60 dark:border-darkborder">
               <div>
-                <label class="block text-xs font-black text-gray-700 uppercase tracking-wider mb-2">Status Operasi</label>
-                <select id="resto_is_active" class="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-primary/20">
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5">Status Operasi</label>
+                <select id="resto_is_active" class="w-full px-3 py-1.5 bg-white dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-xs font-bold text-gray-800 dark:text-white outline-none">
                   <option value="1">AKTIF</option>
                   <option value="0">NONAKTIF</option>
                 </select>
               </div>
               <div>
-                <label class="block text-xs font-black text-gray-700 uppercase tracking-wider mb-2">Tema Warna</label>
-                <div class="flex items-center gap-2">
-                  <input type="color" id="resto_theme_color" class="w-10 h-8 rounded cursor-pointer border-0 p-0" value="#E61010" />
-                  <span class="text-[10px] text-gray-500 font-mono">Palet Warna</span>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Tema Warna</label>
+                <div class="flex items-center gap-2 mt-1">
+                  <input type="color" id="resto_theme_color" class="w-10 h-8 rounded cursor-pointer border-0 p-0" value="#10b981" />
+                  <span class="text-[11px] text-gray-400 font-mono">Palet Visual</span>
                 </div>
               </div>
             </div>
 
             <div>
-              <label class="block text-sm font-bold text-gray-700 mb-1">Alamat Operasional Lengkap</label>
-              <textarea id="resto_address" rows={2} class="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all text-sm" required></textarea>
+              <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Alamat Lengkap</label>
+              <textarea id="resto_address" rows={2} class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm" required></textarea>
             </div>
             
-            <div class="p-4 bg-slate-50 rounded-xl border border-gray-200">
-              <label class="block text-xs font-black text-gray-700 uppercase tracking-wider mb-1">Upload Logo Gerai (R2 CDN)</label>
-              <input type="file" accept="image/*" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-gray-200 hover:file:bg-gray-300 cursor-pointer" onchange="handleLogoUpload(this)" />
+            <div class="p-4 bg-gray-50 dark:bg-darkbg/30 rounded-xl border border-gray-200 dark:border-darkborder">
+              <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">Logo Gerai (R2 CDN)</label>
+              <input type="file" accept="image/*" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-gray-200 dark:file:bg-gray-700 dark:file:text-white hover:file:opacity-80 cursor-pointer" onchange="handleLogoUpload(this)" />
               <input type="hidden" id="resto_image" />
               <div id="upload-status" class="hidden"></div>
             </div>
 
-            <button type="submit" class="w-full bg-primary hover:bg-orange-600 text-white font-bold py-3 rounded-xl shadow-md transition-colors mt-4">
+            <button type="submit" class="w-full bg-primary text-white font-bold py-3 rounded-xl shadow-md shadow-primary/10 transition-colors">
               Simpan Konfigurasi Gerai
             </button>
           </form>
         </div>
       </div>
 
-      {/* RUNTIME EVENT HANDLER CLIENT-SIDE */}
       <script dangerouslySetInnerHTML={{ __html: `
         function getAdminToken() {
           return document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1];
         }
 
-        // Perubahan parameter: Menambahkan openTime dan closeTime di ujung fungsi
-        function openRestoModal(id='', name='', address='', phone='', email='', image='', lat=0, lng=0, theme='#E61010', isActive=1, openTime='08:00', closeTime='22:00') {
+        // Perubahan parameter untuk openTime dan closeTime
+        function openRestoModal(id='', name='', address='', phone='', email='', image='', lat=0, lng=0, theme='#10b981', isActive=1, openTime='08:00', closeTime='22:00') {
           document.getElementById('modalTitle').innerText = id ? 'Edit Data Gerai' : 'Daftarkan Gerai Baru';
           document.getElementById('resto_id').value = id;
           document.getElementById('resto_name').value = name;
@@ -206,8 +206,6 @@ export default createRoute(async (c) => {
           document.getElementById('resto_lng').value = lng;
           document.getElementById('resto_theme_color').value = theme;
           document.getElementById('resto_is_active').value = isActive;
-          
-          // Mengisi value input jam buka & tutup di HTML
           document.getElementById('resto_open_time').value = openTime;
           document.getElementById('resto_close_time').value = closeTime;
           
@@ -228,7 +226,7 @@ export default createRoute(async (c) => {
           if(!file) return;
           const sb = document.getElementById('upload-status');
           sb.innerText = 'Mengunggah ke R2 CDN...';
-          sb.className = 'text-xs text-blue-600 font-bold mt-2 block animate-pulse';
+          sb.className = 'text-xs text-blue-500 font-bold mt-2 block animate-pulse';
 
           const fd = new FormData();
           fd.append('file', file);
@@ -240,15 +238,13 @@ export default createRoute(async (c) => {
             if(data.success || data.url) {
               document.getElementById('resto_image').value = data.url || data.filePath;
               sb.innerText = '✓ Berhasil diunggah ke R2.';
-              sb.className = 'text-xs text-green-600 font-bold mt-2 block';
+              sb.className = 'text-xs text-green-500 font-bold mt-2 block';
             }
-          } catch(e) { sb.innerText = '✕ Gagal upload.'; sb.className = 'text-xs text-red-600 font-bold mt-2 block'; }
+          } catch(e) { sb.innerText = '✕ Gagal upload.'; sb.className = 'text-xs text-red-500 font-bold mt-2 block'; }
         }
 
         async function submitRestaurant() {
           const id = document.getElementById('resto_id').value;
-          
-          // Memasukkan open_time dan close_time ke payload JSON yang akan dikirim ke Backend API
           const payload = {
             name: document.getElementById('resto_name').value,
             address: document.getElementById('resto_address').value,
@@ -288,5 +284,5 @@ export default createRoute(async (c) => {
         }
       `}} />
     </div>
-  , { title: 'Manajemen Mitra Gerai' })
+  , { title: 'Manajemen Mitra Gerai - SPOS' })
 })
