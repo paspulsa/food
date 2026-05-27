@@ -34,44 +34,36 @@ export default createRoute(async (c) => {
   // ==========================================
   // 2. TARIK DATA DARI DATABASE (Katalog, Menu, dan Promo Banner)
   // ==========================================
-  // Kategori Aktif
   const { results: categories } = await c.env.DB.prepare(
     'SELECT id, name, image FROM menu_categories WHERE is_active = 1 ORDER BY sort_order ASC LIMIT 12'
   ).all();
 
-  // Banner Promo (Tipe BANNER)
   const { results: appPromos } = await c.env.DB.prepare(
     "SELECT image, action_url FROM app_promos WHERE type = 'BANNER' AND is_active = 1 ORDER BY created_at DESC"
   ).all();
 
-  // Modal Promo (Tipe MODAL) - Ambil 1 saja yang terbaru
   const modalPromo = await c.env.DB.prepare(
     "SELECT image, action_url FROM app_promos WHERE type = 'MODAL' AND is_active = 1 ORDER BY created_at DESC"
   ).first<any>();
 
-  // Flash Sale / Promo Items (is_promo = 1)
   const { results: promoItems } = await c.env.DB.prepare(
     'SELECT id, category_id, name, description, price, promo_price, is_promo, image, stock, is_available, is_custom, custom_options FROM menu_items WHERE is_available = 1 AND is_promo = 1 ORDER BY created_at DESC LIMIT 6'
   ).all();
 
-  // Best Sellers / Paling Laku (Berdasarkan sold_count)
+  // Best Sellers (Data untuk Tab Paling Laku)
   const { results: bestSellers } = await c.env.DB.prepare(
     'SELECT id, category_id, name, description, price, promo_price, is_promo, image, stock, is_available, is_custom, custom_options, sold_count FROM menu_items WHERE is_available = 1 ORDER BY sold_count DESC, created_at DESC LIMIT 10'
   ).all();
 
-  // Rekomendasi (is_promo = 0)
   const { results: recommendedItems } = await c.env.DB.prepare(
     'SELECT id, category_id, name, description, price, promo_price, is_promo, image, stock, is_available, is_custom, custom_options FROM menu_items WHERE is_available = 1 AND is_promo = 0 ORDER BY created_at DESC LIMIT 10'
   ).all();
 
-  // TARIK SEMUA PRODUK: Digunakan untuk fungsi filter kategori instan tanpa load URL
   const { results: allAvailableItems } = await c.env.DB.prepare(
     'SELECT id, category_id, name, description, price, promo_price, is_promo, image, stock, is_available, is_custom, custom_options FROM menu_items WHERE is_available = 1 ORDER BY created_at DESC'
   ).all();
 
   const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
-
-  // Serialisasi SELURUH data produk agar JS di frontend bisa mem-filter dengan cepat
   const safeItemsJson = JSON.stringify(allAvailableItems).replace(/</g, '\\u003c');
 
   return c.render(
@@ -163,12 +155,77 @@ export default createRoute(async (c) => {
                 Tutup x
               </button>
             </div>
-            {/* Grid item kategori yang akan dirender lewat JavaScript */}
             <div id="dynamic-category-items" class="grid grid-cols-2 gap-3 px-2"></div>
           </div>
 
           {/* =========================================================
-              FLASH SALE / PROMO ITEMS
+              PALING LAKU DI SEKITARMU (BEST SELLERS)
+              DIUBAH MENJADI CARD KECIL (DIBAGI 3) SLIDER HORIZONTAL
+              ========================================================= */}
+          {bestSellers.length > 0 && (
+            <div class="mt-4 pb-2">
+              <div class="px-4 flex justify-between items-center mb-3">
+                <h3 class="text-base font-black text-gray-800 flex items-center gap-1.5">
+                  <span class="text-xl">🔥</span> Paling Laku di Sekitarmu
+                </h3>
+              </div>
+              
+              {/* SLIDER CARD KECIL (w-28 / Lebar Card +- 112px untuk memuat 3 di layar HP) */}
+              <div class="flex overflow-x-auto snap-x snap-mandatory gap-2.5 px-4 hide-scrollbar pb-4 pt-1">
+                {bestSellers.map((item: any, index: number) => {
+                  const isOutOfStock = item.stock === 0;
+                  const currentPrice = item.is_promo ? item.promo_price : item.price;
+
+                  return (
+                    <div class="snap-start shrink-0 w-28 bg-white rounded-xl shadow-sm border border-orange-100 relative flex flex-col overflow-hidden group">
+                      {/* Badge TOP */}
+                      <div class="absolute top-0 left-0 bg-gradient-to-r from-orange-500 to-[#ee4d2d] text-white text-[8px] font-black px-1.5 py-0.5 rounded-br-lg z-10 shadow-sm flex items-center gap-0.5">
+                        TOP {index + 1}
+                      </div>
+                      
+                      {/* Gambar Card Kecil */}
+                      <div class="relative h-24 w-full bg-gray-50 overflow-hidden cursor-pointer" onclick={`openProductDetail('${item.id}')`}>
+                        <img src={item.image || 'https://via.placeholder.com/150'} class={`w-full h-full object-cover transition-transform duration-500 ${isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-110'}`} />
+                        {isOutOfStock && (
+                          <div class="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center">
+                            <span class="bg-gray-900 text-white text-[8px] font-black px-2 py-0.5 rounded-full shadow-md">HABIS</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Detail Data Card Kecil */}
+                      <div class="p-2 flex flex-col flex-1 justify-between">
+                        <div>
+                          <h4 class="text-[10px] font-bold text-gray-800 line-clamp-2 leading-tight mb-1 cursor-pointer" onclick={`openProductDetail('${item.id}')`}>{item.name}</h4>
+                          <span class="text-[11px] font-black text-[#ee4d2d] block">{formatter.format(currentPrice)}</span>
+                        </div>
+                        <div class="mt-2 flex justify-between items-center">
+                          <span class="text-[8px] font-bold text-gray-400 bg-gray-100 px-1 py-0.5 rounded flex items-center gap-0.5">
+                            <svg class="w-2 h-2 text-orange-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"></path></svg>
+                            {item.sold_count}
+                          </span>
+                          {item.is_custom === 1 ? (
+                            <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[8px] font-bold px-2 py-1 rounded-full shadow-sm transition-colors ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
+                              Pilih
+                            </button>
+                          ) : (
+                            <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${currentPrice})` : undefined} disabled={isOutOfStock} class={`w-5 h-5 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#ee4d2d] text-white'}`}>
+                              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4"></path></svg>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          <div class="h-2 bg-gray-100 w-full"></div>
+
+          {/* =========================================================
+              FLASH SALE / PROMO GERCEP (CARD LEBIH BESAR)
               ========================================================= */}
           {promoItems.length > 0 && (
             <div class="mt-4">
@@ -190,7 +247,7 @@ export default createRoute(async (c) => {
                       <div class="absolute top-0 left-0 bg-[#ee4d2d] text-white text-[10px] font-black px-2 py-0.5 rounded-br-lg z-10 shadow-sm">{discountPercent}% OFF</div>
                       
                       <div class="relative h-32 w-full bg-gray-50 overflow-hidden cursor-pointer" onclick={`openProductDetail('${item.id}')`}>
-                        <img src={item.image || 'https://via.placeholder.com/150'} class={`w-full h-full object-cover transition-transform duration-500 ${isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-105'}`} />
+                        <img src={item.image || 'https://via.placeholder.com/150'} class={`w-full h-full object-cover transition-transform ${isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-105'}`} />
                         {isOutOfStock && (
                           <div class="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center">
                             <span class="bg-gray-900 text-white text-[10px] font-black px-3 py-1 rounded-full">HABIS</span>
@@ -209,11 +266,11 @@ export default createRoute(async (c) => {
                         <div class="mt-3 flex justify-between items-center">
                           <span class="text-[9px] font-medium text-gray-500">Stok: {item.stock}</span>
                           {item.is_custom === 1 ? (
-                            <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm transition-colors ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
+                            <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[10px] font-bold px-3 py-1.5 rounded-full transition-colors ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
                               Pilih
                             </button>
                           ) : (
-                            <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.promo_price})` : undefined} disabled={isOutOfStock} class={`w-6 h-6 rounded-full flex items-center justify-center shadow-sm transition-colors active:scale-90 ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
+                            <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${item.promo_price})` : undefined} disabled={isOutOfStock} class={`w-6 h-6 rounded-full flex items-center justify-center transition-colors active:scale-90 ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
                               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg>
                             </button>
                           )}
@@ -229,68 +286,7 @@ export default createRoute(async (c) => {
           {promoItems.length > 0 && <div class="h-2 bg-gray-100 w-full"></div>}
 
           {/* =========================================================
-              PALING LAKU (BEST SELLERS)
-              ========================================================= */}
-          {bestSellers.length > 0 && (
-            <div class="mt-4 pb-2">
-              <div class="px-4 flex justify-between items-center mb-3">
-                <h3 class="text-base font-black text-gray-800 flex items-center gap-1.5">
-                  <span class="text-xl">🔥</span> Paling Laku di Sekitarmu
-                </h3>
-              </div>
-              
-              <div class="flex overflow-x-auto snap-x snap-mandatory gap-3 px-4 hide-scrollbar pb-4 pt-1">
-                {bestSellers.map((item: any, index: number) => {
-                  const isOutOfStock = item.stock === 0;
-                  const currentPrice = item.is_promo ? item.promo_price : item.price;
-
-                  return (
-                    <div class="snap-start shrink-0 w-40 bg-white rounded-2xl shadow-sm border border-orange-100 relative flex flex-col overflow-hidden group">
-                      <div class="absolute top-0 left-0 bg-gradient-to-r from-orange-500 to-[#ee4d2d] text-white text-[10px] font-black px-2.5 py-1 rounded-br-xl z-10 shadow-sm flex items-center gap-1">
-                        TOP {index + 1}
-                      </div>
-                      
-                      <div class="relative h-32 w-full bg-gray-50 overflow-hidden cursor-pointer" onclick={`openProductDetail('${item.id}')`}>
-                        <img src={item.image || 'https://via.placeholder.com/150'} class={`w-full h-full object-cover transition-transform duration-500 ${isOutOfStock ? 'opacity-50 grayscale' : 'group-hover:scale-110'}`} />
-                        {isOutOfStock && (
-                          <div class="absolute inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center">
-                            <span class="bg-gray-900 text-white text-[10px] font-black px-3 py-1 rounded-full shadow-md">HABIS</span>
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div class="p-3 flex flex-col flex-1 justify-between">
-                        <div>
-                          <h4 class="text-xs font-bold text-gray-800 line-clamp-2 leading-snug mb-1 cursor-pointer" onclick={`openProductDetail('${item.id}')`}>{item.name}</h4>
-                          <span class="text-sm font-black text-[#ee4d2d]">{formatter.format(currentPrice)}</span>
-                        </div>
-                        <div class="mt-3 flex justify-between items-center">
-                          <span class="text-[9px] font-bold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded flex items-center gap-1">
-                            <svg class="w-2.5 h-2.5 text-orange-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"></path></svg>
-                            {item.sold_count} terjual
-                          </span>
-                          {item.is_custom === 1 ? (
-                            <button onclick={!isOutOfStock ? `openProductDetail('${item.id}')` : undefined} disabled={isOutOfStock} class={`text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm transition-colors ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}`}>
-                              Pilih
-                            </button>
-                          ) : (
-                            <button onclick={!isOutOfStock ? `addToCart('${item.id}', '${item.name.replace(/'/g, "\\'")}', ${currentPrice})` : undefined} disabled={isOutOfStock} class={`w-6 h-6 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 ${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#ee4d2d] text-white'}`}>
-                              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M12 4v16m8-8H4"></path></svg>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          <div class="h-2 bg-gray-100 w-full"></div>
-
-          {/* =========================================================
-              REKOMENDASI ITEM (EXPLORE)
+              REKOMENDASI (EXPLORE)
               ========================================================= */}
           <div class="mt-4 pb-8">
             <div class="px-4 flex justify-between items-center mb-3">
@@ -405,8 +401,6 @@ export default createRoute(async (c) => {
                  <span id="pdm-price" class="text-lg font-black text-[#ee4d2d]"></span>
                  <span id="pdm-original-price" class="text-xs font-bold text-gray-400 line-through hidden"></span>
               </div>
-
-              {/* Tempat Injeksi Opsi Custom HTML (Radio/Checkbox dari JSON) */}
               <div id="pdm-custom-container" class="mt-6 space-y-5 border-t border-gray-100 pt-5"></div>
             </div>
 
@@ -439,7 +433,7 @@ export default createRoute(async (c) => {
               <span class="text-[10px] font-semibold">Promo</span>
             </a>
             <a href="#" class="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition relative">
-              <div id="nav-cart-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center border border-white hidden">0</div>
+              <div id="nav-cart-badge" class="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white hidden">0</div>
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
               <span class="text-[10px] font-semibold">Keranjang</span>
             </a>
@@ -457,7 +451,7 @@ export default createRoute(async (c) => {
       </div>
 
       {/* =========================================================
-          SCRIPT INTERAKTIF LENGKAP (CLIENT-SIDE)
+          SCRIPT INTERAKTIF UTAMA (CLIENT-SIDE)
           ========================================================= */}
       <script dangerouslySetInnerHTML={{ __html: `
         // DATA GLOBAL DARI SERVER
@@ -468,7 +462,6 @@ export default createRoute(async (c) => {
         let cartItems = 0;
         let cartTotal = 0;
         
-        // VARIABEL STATE UNTUK MODAL DETAIL PRODUK
         let currentActiveProduct = null;
         let currentQty = 1;
         let basePrice = 0;
@@ -633,7 +626,7 @@ export default createRoute(async (c) => {
 
                const btnHtml = item.is_custom === 1
                  ? \`<button onclick="\${!isOutOfStock ? \`openProductDetail('\${item.id}')\` : ''}" \${isOutOfStock ? 'disabled' : ''} class="text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm transition-colors \${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-orange-50 text-[#ee4d2d] hover:bg-[#ee4d2d] hover:text-white'}">Pilih</button>\`
-                 : \`<button onclick="\${!isOutOfStock ? \`addToCart('\${item.id}', '\${item.name.replace(/'/g, "\\\\'")}', \${currentPrice})\` : ''}" \${isOutOfStock ? 'disabled' : ''} class="w-7 h-7 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 \${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#ee4d2d] text-white'}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg></button>\`;
+                 : \`<button onclick="\${!isOutOfStock ? \`addToCart('\${item.id}', '\${item.name.replace(/'/g, "\\\\'")}', \${currentPrice})\` : ''}" \${isOutOfStock ? 'disabled' : ''} class="w-7 h-7 rounded-full flex items-center justify-center shadow-sm transition-transform active:scale-90 \${isOutOfStock ? 'bg-gray-100 text-gray-300 cursor-not-allowed' : 'bg-[#ee4d2d] text-white hover:bg-orange-700'}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"></path></svg></button>\`;
 
                return \`
                  <div class="bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col overflow-hidden group">
