@@ -1,3 +1,53 @@
+import { Hono } from 'hono';
+import { Bindings, Variables } from '../types';
+
+// INI BAGIAN YANG HILANG DAN BIKIN BUILD ERROR TADI
+export const menuCategoryRouter = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+// ==========================================
+// 1. PUBLIC API (UNTUK PELANGGAN / STORE WEB)
+// ==========================================
+menuCategoryRouter.get('/public', async (c) => {
+  const restaurant_id = c.req.query('restaurant_id');
+  let results = [];
+
+  if (restaurant_id) {
+    const query = await c.env.DB.prepare(
+      'SELECT * FROM menu_categories WHERE restaurant_id = ? AND is_active = 1 ORDER BY sort_order ASC, created_at DESC'
+    ).bind(restaurant_id).all();
+    results = query.results;
+  } else {
+    const query = await c.env.DB.prepare(
+      'SELECT * FROM menu_categories WHERE is_active = 1 ORDER BY sort_order ASC, created_at DESC'
+    ).all();
+    results = query.results;
+  }
+
+  return c.json({ success: true, data: results });
+});
+
+// ==========================================
+// 2. ADMIN API (UNTUK DASHBOARD ADMIN)
+// ==========================================
+menuCategoryRouter.get('/', async (c) => {
+  const restaurant_id = c.req.query('restaurant_id');
+  let results = [];
+
+  if (restaurant_id) {
+    const query = await c.env.DB.prepare(
+      'SELECT * FROM menu_categories WHERE restaurant_id = ? ORDER BY sort_order ASC, created_at DESC'
+    ).bind(restaurant_id).all();
+    results = query.results;
+  } else {
+    const query = await c.env.DB.prepare(
+      'SELECT * FROM menu_categories ORDER BY created_at DESC'
+    ).all();
+    results = query.results;
+  }
+
+  return c.json({ success: true, data: results });
+});
+
 // Buat Kategori Baru
 menuCategoryRouter.post('/', async (c) => {
   const body = await c.req.json();
@@ -60,4 +110,11 @@ menuCategoryRouter.put('/:id', async (c) => {
     
     return c.json({ success: false, message: 'Gagal update: ' + error.message }, 500);
   }
+});
+
+// Hapus Kategori
+menuCategoryRouter.delete('/:id', async (c) => {
+  const id = c.req.param('id');
+  await c.env.DB.prepare('DELETE FROM menu_categories WHERE id = ?').bind(id).run();
+  return c.json({ success: true, message: 'Kategori berhasil dihapus' });
 });
