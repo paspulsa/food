@@ -1,7 +1,6 @@
 import { createRoute } from 'honox/factory'
 
 export default createRoute(async (c) => {
-  // 1. Ambil daftar gerai restoran
   const { results: outlets } = await c.env.DB.prepare(
     'SELECT id, name, address FROM restaurants ORDER BY created_at ASC'
   ).all();
@@ -17,19 +16,17 @@ export default createRoute(async (c) => {
     return c.redirect('/admin/menus?restaurant_id=' + defaultId);
   }
 
-  // 2. Tarik data dari tabel baru: menu_categories (diurutkan berdasarkan sort_order)
   const { results: categories } = await c.env.DB.prepare(
     'SELECT id, name, description, sort_order, is_active FROM menu_categories WHERE restaurant_id = ? ORDER BY sort_order ASC, created_at DESC'
   ).bind(activeOutletId).all();
 
-  // 3. Tarik data item produk menggunakan category_id
+  // TARIK DATA TERMASUK is_custom DAN custom_options
   const { results: menuItems } = await c.env.DB.prepare(
-    'SELECT id, category_id, name, description, price, image, is_available, stock, is_promo, promo_price, end_promo_time, hpp FROM menu_items ORDER BY created_at DESC'
+    'SELECT id, category_id, name, description, price, image, is_available, stock, is_promo, promo_price, end_promo_time, hpp, is_custom, custom_options FROM menu_items ORDER BY created_at DESC'
   ).all();
 
-  // Pemetaan item produk ke dalam grup kategori barunya
   const itemsByCategory = menuItems.reduce((acc: any, item: any) => {
-    const catId = item.category_id || item.menu_id; // fallback toleransi migrasi data
+    const catId = item.category_id || item.menu_id; 
     if (!acc[catId]) acc[catId] = [];
     acc[catId].push(item);
     return acc;
@@ -39,8 +36,6 @@ export default createRoute(async (c) => {
 
   return c.render(
     <div class="space-y-6 relative">
-      
-      {/* TOOLBAR ATAS */}
       <div class="bg-white dark:bg-darkpanel p-5 rounded-2xl border border-gray-100 dark:border-darkborder flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm">
         <div class="w-full sm:w-auto">
           <label class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Pilih Unit Gerai / Restoran</label>
@@ -66,7 +61,6 @@ export default createRoute(async (c) => {
         </div>
       </div>
 
-      {/* RENDER LIST GRUP KATEGORI DARI TABEL BARU */}
       {categories.length === 0 ? (
         <div class="bg-white dark:bg-darkpanel p-12 rounded-2xl border border-gray-100 dark:border-darkborder text-center shadow-sm">
           <h3 class="text-base font-bold text-gray-800 dark:text-white">Katalog Unit Masih Kosong</h3>
@@ -76,8 +70,6 @@ export default createRoute(async (c) => {
         <div class="space-y-6">
           {categories.map((cat: any) => (
             <div class={`bg-white dark:bg-darkpanel rounded-2xl border border-gray-100 dark:border-darkborder shadow-sm overflow-hidden ${cat.is_active === 0 ? 'opacity-60 grayscale-[30%]' : ''}`}>
-              
-              {/* HEADER KATEGORI */}
               <div class="px-5 py-4 bg-gray-50 dark:bg-darkbg/40 border-b border-gray-100 dark:border-darkborder flex justify-between items-center">
                 <div>
                   <h4 class="font-bold text-gray-800 dark:text-white flex items-center gap-2">
@@ -90,7 +82,6 @@ export default createRoute(async (c) => {
                 <button onclick={`deleteCategory('${cat.id}')`} class="text-xs font-bold text-red-500 bg-red-500/10 hover:bg-red-500/20 px-2.5 py-1 rounded-lg transition-colors">Hapus</button>
               </div>
 
-              {/* GRID ITEM PRODUK */}
               <div class="p-5">
                 {!itemsByCategory[cat.id] || itemsByCategory[cat.id].length === 0 ? (
                   <p class="text-xs text-gray-400 dark:text-gray-500 text-center py-2 italic">Belum ada item produk di bawah kategori ini.</p>
@@ -101,19 +92,27 @@ export default createRoute(async (c) => {
                       const activePrice = isPromoActive ? item.promo_price : item.price;
                       const profitMargin = activePrice - (item.hpp || 0);
 
+                      // Lolos Escape quotes untuk parsing JSON yang aman di atribut fungsi onClick
+                      const safeName = item.name.replace(/'/g, "\\'");
+                      const safeDesc = (item.description || '').replace(/'/g, "\\'");
+                      const safeCustomOptions = (item.custom_options || '[]').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
                       return (
                         <div class="p-4 rounded-xl border border-gray-100 dark:border-darkborder bg-gray-50/50 dark:bg-darkbg/20 flex gap-3 relative group hover:border-primary/40 dark:hover:border-primary/40 transition-all">
-                          <img 
-                            src={item.image || 'https://via.placeholder.com/150?text=SPOS'} 
-                            class="w-16 h-16 object-cover rounded-xl border border-gray-200/50 dark:border-darkborder flex-shrink-0 bg-white"
-                            alt={item.name}
-                          />
+                          <div class="relative w-16 h-16 flex-shrink-0">
+                            <img src={item.image || 'https://via.placeholder.com/150?text=SPOS'} class="w-full h-full object-cover rounded-xl border border-gray-200/50 dark:border-darkborder bg-white" alt={item.name} />
+                          </div>
+                          
                           <div class="flex-1 min-w-0 flex flex-col justify-between">
                             <div>
                               <div class="flex items-start justify-between gap-1">
-                                <h5 class="font-bold text-gray-800 dark:text-gray-200 text-sm truncate pr-4">{item.name}</h5>
+                                <h5 class="font-bold text-gray-800 dark:text-gray-200 text-sm pr-4 line-clamp-1 flex items-center gap-1">
+                                  {item.name} 
+                                  {/* LABEL DAPAT DICUSTOM */}
+                                  {item.is_custom === 1 && <span class="bg-blue-100 text-blue-600 text-[8px] px-1 py-0.5 rounded border border-blue-200" title="Dapat Dicustom">🛠️</span>}
+                                </h5>
                                 <button 
-                                  onclick={`openProductModal('${item.id}', '${item.category_id || item.menu_id}', '${item.name.replace(/'/g, "\\'")}', '${(item.description || '').replace(/'/g, "\\'")}', ${item.price}, ${item.stock}, ${item.is_available}, ${item.is_promo}, ${item.promo_price}, '${item.end_promo_time || ''}', ${item.hpp}, '${item.image || ''}')`}
+                                  onclick={`openProductModal('${item.id}', '${item.category_id || item.menu_id}', '${safeName}', '${safeDesc}', ${item.price}, ${item.stock}, ${item.is_available}, ${item.is_promo}, ${item.promo_price}, '${item.end_promo_time || ''}', ${item.hpp}, '${item.image || ''}', ${item.is_custom}, '${safeCustomOptions}')`}
                                   class="text-gray-400 hover:text-primary transition-colors"
                                   title="Edit"
                                 >
@@ -131,12 +130,6 @@ export default createRoute(async (c) => {
                                   <span class="text-sm font-black text-primary">{currencyFormatter.format(item.price)}</span>
                                 )}
                               </div>
-
-                              {isPromoActive && item.end_promo_time && (
-                                <span class="inline-block text-[9px] bg-red-500/10 text-red-500 font-bold px-1.5 py-0.5 rounded mt-0.5 max-w-full truncate">
-                                  ⏰ {new Date(item.end_promo_time).toLocaleDateString('id-ID')}
-                                </span>
-                              )}
                             </div>
                             
                             <div class="mt-2 pt-1 border-t border-gray-100 dark:border-darkborder space-y-1 text-[11px]">
@@ -147,8 +140,7 @@ export default createRoute(async (c) => {
                                 </span>
                               </div>
                               <div class="flex justify-between items-center text-gray-400 border-t border-dashed border-gray-200/50 dark:border-gray-700/50 pt-1">
-                                <span>Modal: <span class="font-mono">{currencyFormatter.format(item.hpp || 0)}</span></span>
-                                <span class="text-green-500 font-medium">Laba: {currencyFormatter.format(profitMargin)}</span>
+                                <span>Laba: <span class="text-green-500 font-medium">{currencyFormatter.format(profitMargin)}</span></span>
                               </div>
                             </div>
                           </div>
@@ -167,7 +159,7 @@ export default createRoute(async (c) => {
         </div>
       )}
 
-      {/* MODAL: BUAT KATEGORI BARU */}
+      {/* MODAL KATEGORI */}
       <div id="categoryModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white dark:bg-darkpanel rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform scale-95 transition-all border dark:border-darkborder" id="categoryModalInner">
           <div class="p-5 border-b border-gray-100 dark:border-darkborder flex justify-between items-center bg-gray-50 dark:bg-darkbg/40">
@@ -178,15 +170,15 @@ export default createRoute(async (c) => {
             <input type="hidden" id="cat_restaurant_id" value={activeOutletId} />
             <div>
               <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Nama Kategori</label>
-              <input type="text" id="cat_name" placeholder="Contoh: Makanan Utama, Dessert" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm focus:border-primary" required />
+              <input type="text" id="cat_name" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm focus:border-primary" required />
             </div>
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Urutan Urut (*Sort Order*)</label>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Urutan (*Sort Order*)</label>
                 <input type="number" id="cat_sort" value="0" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm font-mono" required />
               </div>
               <div>
-                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Status Aktivitas Grup</label>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Status Aktivitas</label>
                 <select id="cat_active" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-xs font-bold text-gray-800 dark:text-white outline-none">
                   <option value="1">Aktif Tampilkan</option>
                   <option value="0">Sembunyikan Sementara</option>
@@ -202,25 +194,28 @@ export default createRoute(async (c) => {
         </div>
       </div>
 
-      {/* MODAL: TAMBAH/EDIT PRODUK */}
+      {/* MODAL PRODUK (Dengan Fitur Builder Kustomisasi Makanan) */}
       <div id="productModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-darkpanel rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform scale-95 transition-all border dark:border-darkborder" id="productModalInner">
+        <div class="bg-white dark:bg-darkpanel rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden transform scale-95 transition-all border dark:border-darkborder" id="productModalInner">
           <div class="p-5 border-b border-gray-100 dark:border-darkborder flex justify-between items-center bg-gray-50 dark:bg-darkbg/40">
             <h3 class="font-bold text-gray-800 dark:text-white" id="productModalTitle">Tambah Produk Baru</h3>
             <button onclick="closeProductModal()" class="text-gray-400 hover:text-gray-600 dark:hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
           </div>
-          <form class="p-6 space-y-4 max-h-[75vh] overflow-y-auto" onsubmit="event.preventDefault(); submitProduct();">
+          <form class="p-6 space-y-4 max-h-[80vh] overflow-y-auto" onsubmit="event.preventDefault(); submitProduct();">
             <input type="hidden" id="prod_id" />
-            <div>
-              <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Target Penempatan Kategori</label>
-              <select id="prod_category_id" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-sm font-bold text-gray-800 dark:text-white outline-none" required>
-                <option value="" disabled selected>-- Tentukan Kategori --</option>
-                {categories.map((c: any) => <option value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Nama Item Produk</label>
-              <input type="text" id="prod_name" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm" required />
+            
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Kategori</label>
+                <select id="prod_category_id" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-sm font-bold text-gray-800 dark:text-white outline-none" required>
+                  <option value="" disabled selected>-- Tentukan --</option>
+                  {categories.map((c: any) => <option value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Nama Item Produk</label>
+                <input type="text" id="prod_name" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm" required />
+              </div>
             </div>
             
             <div class="grid grid-cols-3 gap-3">
@@ -241,18 +236,31 @@ export default createRoute(async (c) => {
             <div class="p-4 bg-red-500/5 rounded-xl border border-red-500/10 space-y-3">
               <div class="flex items-center gap-2">
                 <input type="checkbox" id="prod_is_promo" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer" onchange="togglePromoFields()" />
-                <label for="prod_is_promo" class="text-xs font-bold text-gray-700 dark:text-gray-300 cursor-pointer">Aktifkan Status Promo Produk</label>
+                <label for="prod_is_promo" class="text-xs font-bold text-gray-700 dark:text-gray-300 cursor-pointer">Aktifkan Status Promo</label>
               </div>
-              
               <div id="promo_inputs_group" class="grid grid-cols-2 gap-3 transition-opacity duration-200">
                 <div>
                   <label class="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Harga Promo (Rp)</label>
                   <input type="number" id="prod_promo_price" class="w-full px-3 py-1.5 bg-white dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-lg text-sm font-mono text-gray-800 dark:text-white outline-none" />
                 </div>
                 <div>
-                  <label class="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Batas Promo Berakhir</label>
+                  <label class="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Batas Waktu</label>
                   <input type="datetime-local" id="prod_end_promo_time" class="w-full px-3 py-1.5 bg-white dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-lg text-xs font-mono text-gray-800 dark:text-white outline-none" />
                 </div>
+              </div>
+            </div>
+
+            {/* SEKTOR BUILDER CUSTOM OPTIONS */}
+            <div class="p-4 bg-blue-500/5 rounded-xl border border-blue-500/10">
+              <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                  <input type="checkbox" id="prod_is_custom" class="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-600 cursor-pointer" onchange="renderCustomBuilder()" />
+                  <label for="prod_is_custom" class="text-sm font-bold text-blue-800 dark:text-blue-300 cursor-pointer">Item Bisa Dicustom (Level Pedas, Toping, dll)</label>
+                </div>
+              </div>
+              
+              <div id="custom-builder-container" class="space-y-3 hidden">
+                {/* Diinjeksi oleh JavaScript Vanilla Visual Builder */}
               </div>
             </div>
 
@@ -271,7 +279,7 @@ export default createRoute(async (c) => {
             </div>
             
             <div class="p-4 bg-gray-50 dark:bg-darkbg/30 rounded-xl border border-gray-200 dark:border-darkborder">
-              <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">Foto Produk (Otomatis ke Cloudinary)</label>
+              <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">Foto Produk (R2 CDN)</label>
               <input type="file" accept="image/*" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-primary/10 file:text-primary hover:file:opacity-80 cursor-pointer" onchange="handleDirectUpload(this)" />
               <input type="hidden" id="prod_image_url" />
               <div id="upload-status" class="hidden"></div>
@@ -282,11 +290,8 @@ export default createRoute(async (c) => {
         </div>
       </div>
 
-      {/* SCRIPT KONTROL UI */}
       <script dangerouslySetInnerHTML={{ __html: `
-        function getAuthToken() {
-          return document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1];
-        }
+        function getAuthToken() { return document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1]; }
 
         function togglePromoFields() {
           const isChecked = document.getElementById('prod_is_promo').checked;
@@ -306,7 +311,7 @@ export default createRoute(async (c) => {
           const file = inputElement.files[0];
           if(!file) return;
           const statusBox = document.getElementById('upload-status');
-          statusBox.innerText = 'Mengunggah ke Cloudinary...';
+          statusBox.innerText = 'Mengunggah gambar...';
           statusBox.className = 'text-xs text-blue-500 font-bold mt-2 block animate-pulse';
           const formData = new FormData();
           formData.append('file', file);
@@ -317,17 +322,84 @@ export default createRoute(async (c) => {
             const data = await res.json();
             if(data.success || data.url) {
               document.getElementById('prod_image_url').value = data.url || data.filePath;
-              statusBox.innerText = '✓ Berhasil diunggah & teroptimasi';
+              statusBox.innerText = '✓ Berhasil diunggah ke R2';
               statusBox.className = 'text-xs text-green-500 font-bold mt-2 block';
-            } else {
-              throw new Error(data.message);
             }
           } catch(err) {
-            statusBox.innerText = '✕ Gagal: ' + err.message;
+            statusBox.innerText = '✕ Gagal unggah data.';
             statusBox.className = 'text-xs text-red-500 font-bold mt-2 block';
           }
         }
 
+        // ==========================================
+        // VANILLA JS: DYNAMIC JSON BUILDER KUSTOMISASI
+        // ==========================================
+        let customState = [];
+
+        function renderCustomBuilder() {
+          const container = document.getElementById('custom-builder-container');
+          if (!document.getElementById('prod_is_custom').checked) {
+            container.classList.add('hidden');
+            return;
+          }
+          container.classList.remove('hidden');
+
+          let html = '';
+          customState.forEach((group, gIndex) => {
+            html += \`
+              <div class="border border-blue-200 p-3 rounded-xl bg-white dark:bg-darkbg dark:border-gray-700 mb-3 relative group">
+                <button type="button" onclick="removeGroup(\${gIndex})" class="absolute top-2 right-2 text-red-400 hover:text-red-600 bg-red-50 rounded p-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>
+                
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-3 pr-8">
+                  <input type="text" class="text-sm font-bold border-b border-gray-300 outline-none focus:border-blue-500 py-1 flex-1 dark:bg-darkbg dark:text-white" placeholder="Nama Grup (Cth: Level Pedas)" value="\${group.name.replace(/"/g, '&quot;')}" onchange="updateGroup(\${gIndex}, 'name', this.value)">
+                  <select class="text-xs border border-gray-300 rounded-lg p-1.5 outline-none dark:bg-gray-800 dark:text-white" onchange="updateGroup(\${gIndex}, 'type', this.value)">
+                    <option value="radio" \${group.type === 'radio' ? 'selected' : ''}>Pilih 1 Saja (Radio)</option>
+                    <option value="checkbox" \${group.type === 'checkbox' ? 'selected' : ''}>Pilih Banyak (Checkbox)</option>
+                  </select>
+                  <label class="text-[11px] font-bold flex items-center gap-1.5 bg-gray-50 dark:bg-gray-800 px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer">
+                    <input type="checkbox" \${group.is_required ? 'checked' : ''} onchange="updateGroup(\${gIndex}, 'is_required', this.checked)"> Wajib Diisi
+                  </label>
+                </div>
+
+                <div class="space-y-2 pl-3 border-l-2 border-blue-100 dark:border-blue-900/50">
+            \`;
+            group.choices.forEach((choice, cIndex) => {
+              html += \`
+                <div class="flex items-center gap-2">
+                  <input type="text" class="text-xs border border-gray-200 rounded-lg p-1.5 flex-1 outline-none focus:border-blue-400 dark:bg-gray-800 dark:text-white dark:border-gray-700" placeholder="Pilihan (Cth: Ekstra Pedas)" value="\${choice.name.replace(/"/g, '&quot;')}" onchange="updateChoice(\${gIndex}, \${cIndex}, 'name', this.value)">
+                  <div class="relative w-28">
+                    <span class="absolute inset-y-0 left-0 pl-2 flex items-center text-[10px] text-gray-400">+Rp</span>
+                    <input type="number" class="text-xs border border-gray-200 rounded-lg p-1.5 pl-8 w-full outline-none focus:border-blue-400 dark:bg-gray-800 dark:text-white dark:border-gray-700" placeholder="Harga" value="\${choice.price}" onchange="updateChoice(\${gIndex}, \${cIndex}, 'price', this.value)">
+                  </div>
+                  <button type="button" onclick="removeChoice(\${gIndex}, \${cIndex})" class="text-gray-400 hover:text-red-500"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+                </div>
+              \`;
+            });
+            html += \`
+                  <button type="button" onclick="addChoice(\${gIndex})" class="text-[11px] text-blue-600 font-bold mt-2 hover:underline">+ Tambah Pilihan</button>
+                </div>
+              </div>
+            \`;
+          });
+          html += \`<button type="button" onclick="addGroup()" class="w-full border-2 border-dashed border-blue-200 text-blue-600 bg-blue-50 text-xs font-bold py-2.5 rounded-xl hover:bg-blue-100 transition-colors">+ Tambah Grup Kustomisasi</button>\`;
+          container.innerHTML = html;
+        }
+
+        // Mutasi State
+        function addGroup() { customState.push({ name: '', type: 'radio', is_required: true, choices: [] }); renderCustomBuilder(); }
+        function removeGroup(idx) { customState.splice(idx, 1); renderCustomBuilder(); }
+        function updateGroup(idx, key, val) { customState[idx][key] = val; }
+        
+        function addChoice(gIdx) { customState[gIdx].choices.push({ name: '', price: 0 }); renderCustomBuilder(); }
+        function removeChoice(gIdx, cIdx) { customState[gIdx].choices.splice(cIdx, 1); renderCustomBuilder(); }
+        function updateChoice(gIdx, cIdx, key, val) { 
+          if(key === 'price') val = parseInt(val) || 0;
+          customState[gIdx].choices[cIdx][key] = val; 
+        }
+
+        // ==========================================
+        // KONTROL MODAL UTAMA
+        // ==========================================
         function openProductModalGlobal() {
           const sel = document.getElementById('prod_category_id');
           if(sel.options.length <= 1) {
@@ -335,10 +407,10 @@ export default createRoute(async (c) => {
             openCategoryModal();
             return;
           }
-          openProductModal('', '', '', '', '', 50, 1, 0, 0, '', 0, '');
+          openProductModal('', '', '', '', '', 50, 1, 0, 0, '', 0, '', 0, '[]');
         }
 
-        function openProductModal(id='', catId='', name='', desc='', price='', stock='50', available='1', isPromo='0', promoPrice='0', endTime='', hpp='0', img='') {
+        function openProductModal(id='', catId='', name='', desc='', price='', stock='50', available='1', isPromo='0', promoPrice='0', endTime='', hpp='0', img='', isCustom=0, customOptionsStr='[]') {
           document.getElementById('productModalTitle').innerText = id ? 'Konfigurasi Edit Menu Produk' : 'Tambah Menu Produk Baru';
           document.getElementById('prod_id').value = id;
           document.getElementById('prod_category_id').value = catId;
@@ -352,8 +424,19 @@ export default createRoute(async (c) => {
           document.getElementById('prod_promo_price').value = promoPrice;
           document.getElementById('prod_end_promo_time').value = endTime ? endTime.substring(0,16) : '';
           document.getElementById('prod_image_url').value = img;
+          
+          document.getElementById('prod_is_custom').checked = parseInt(isCustom) === 1;
+          try {
+            // Restore special characters yang diamankan saat passing dari template literal Hono JSX
+            let parsedStr = customOptionsStr.replace(/&quot;/g, '"');
+            customState = JSON.parse(parsedStr);
+            if (!Array.isArray(customState)) customState = [];
+          } catch(e) {
+            customState = [];
+          }
+          
           togglePromoFields();
-          document.getElementById('upload-status').classList.add('hidden');
+          renderCustomBuilder();
 
           const modal = document.getElementById('productModal');
           const inner = document.getElementById('productModalInner');
@@ -377,7 +460,6 @@ export default createRoute(async (c) => {
             is_active: parseInt(document.getElementById('cat_active').value),
             description: document.getElementById('cat_desc').value
           };
-          // Poin endpoint simpan diarahkan ke tabel kategori baru
           await fetch('/api/v1/protected/admin/menu-categories', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
             body: JSON.stringify(payload)
@@ -398,8 +480,13 @@ export default createRoute(async (c) => {
             is_promo: document.getElementById('prod_is_promo').checked ? 1 : 0,
             promo_price: parseInt(document.getElementById('prod_promo_price').value) || 0,
             end_promo_time: document.getElementById('prod_end_promo_time').value || null,
-            image: document.getElementById('prod_image_url').value || null
+            image: document.getElementById('prod_image_url').value || null,
+            
+            // PAYLOAD KUSTOMISASI
+            is_custom: document.getElementById('prod_is_custom').checked ? 1 : 0,
+            custom_options: JSON.stringify(customState)
           };
+
           const method = id ? 'PUT' : 'POST';
           const endpoint = id ? '/api/v1/protected/admin/menu-items/' + id : '/api/v1/protected/admin/menu-items';
           const res = await fetch(endpoint, {
