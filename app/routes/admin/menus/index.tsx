@@ -225,11 +225,11 @@ export default createRoute(async (c) => {
             
             <div class="grid grid-cols-3 gap-3">
               <div>
-                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Harga Jual Normal (Rp)</label>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Harga Jual (Rp)</label>
                 <input type="number" id="prod_price" class="w-full px-3 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm font-mono" required />
               </div>
               <div>
-                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Harga Modal / HPP (Rp)</label>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Harga Modal (Rp)</label>
                 <input type="number" id="prod_hpp" class="w-full px-3 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm font-mono" required />
               </div>
               <div>
@@ -246,11 +246,11 @@ export default createRoute(async (c) => {
               
               <div id="promo_inputs_group" class="grid grid-cols-2 gap-3 transition-opacity duration-200">
                 <div>
-                  <label class="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Harga Promo Terpotong (Rp)</label>
+                  <label class="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Harga Promo (Rp)</label>
                   <input type="number" id="prod_promo_price" class="w-full px-3 py-1.5 bg-white dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-lg text-sm font-mono text-gray-800 dark:text-white outline-none" />
                 </div>
                 <div>
-                  <label class="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Batas Waktu Berakhir Promo</label>
+                  <label class="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Batas Promo Berakhir</label>
                   <input type="datetime-local" id="prod_end_promo_time" class="w-full px-3 py-1.5 bg-white dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-lg text-xs font-mono text-gray-800 dark:text-white outline-none" />
                 </div>
               </div>
@@ -271,8 +271,8 @@ export default createRoute(async (c) => {
             </div>
             
             <div class="p-4 bg-gray-50 dark:bg-darkbg/30 rounded-xl border border-gray-200 dark:border-darkborder">
-              <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">Foto Produk ke CDN R2</label>
-              <input type="file" accept="image/*" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-primary/10 file:text-primary hover:file:opacity-80 cursor-pointer" onchange="handleDirectR2Upload(this)" />
+              <label class="block text-xs font-bold text-gray-500 dark:text-gray-400 mb-1.5">Foto Produk (Otomatis ke Cloudinary)</label>
+              <input type="file" accept="image/*" class="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-primary/10 file:text-primary hover:file:opacity-80 cursor-pointer" onchange="handleDirectUpload(this)" />
               <input type="hidden" id="prod_image_url" />
               <div id="upload-status" class="hidden"></div>
             </div>
@@ -302,11 +302,11 @@ export default createRoute(async (c) => {
           }
         }
 
-        async function handleDirectR2Upload(inputElement) {
+        async function handleDirectUpload(inputElement) {
           const file = inputElement.files[0];
           if(!file) return;
           const statusBox = document.getElementById('upload-status');
-          statusBox.innerText = 'Mengunggah...';
+          statusBox.innerText = 'Mengunggah ke Cloudinary...';
           statusBox.className = 'text-xs text-blue-500 font-bold mt-2 block animate-pulse';
           const formData = new FormData();
           formData.append('file', file);
@@ -317,11 +317,13 @@ export default createRoute(async (c) => {
             const data = await res.json();
             if(data.success || data.url) {
               document.getElementById('prod_image_url').value = data.url || data.filePath;
-              statusBox.innerText = '✓ Berhasil diunggah ke CDN R2';
+              statusBox.innerText = '✓ Berhasil diunggah & teroptimasi';
               statusBox.className = 'text-xs text-green-500 font-bold mt-2 block';
+            } else {
+              throw new Error(data.message);
             }
           } catch(err) {
-            statusBox.innerText = '✕ Gagal upload.';
+            statusBox.innerText = '✕ Gagal: ' + err.message;
             statusBox.className = 'text-xs text-red-500 font-bold mt-2 block';
           }
         }
@@ -351,6 +353,7 @@ export default createRoute(async (c) => {
           document.getElementById('prod_end_promo_time').value = endTime ? endTime.substring(0,16) : '';
           document.getElementById('prod_image_url').value = img;
           togglePromoFields();
+          document.getElementById('upload-status').classList.add('hidden');
 
           const modal = document.getElementById('productModal');
           const inner = document.getElementById('productModalInner');
