@@ -41,7 +41,8 @@ export default createRoute(async (c) => {
                 </tr>
               ) : orders.map((order: any) => (
                 <tr class="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
-                  <td class="px-6 py-4 font-bold font-mono text-xs text-gray-600 dark:text-gray-400">#{order.id.substring(0,8)}</td>
+                  <td class="px-6 py-4">
+                  <a href={`/admin/orders/${order.id}`} class="font-bold font-mono text-xs text-primary hover:underline"> #{order.id.substring(0,8)}</a></td>
                   <td class="px-6 py-4">
                     <div class="font-semibold text-gray-800 dark:text-gray-200">{order.user_name}</div>
                     <div class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{order.restaurant_name}</div>
