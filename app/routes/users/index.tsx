@@ -170,14 +170,14 @@ export default createRoute(async (c) => {
               PALING LAKU DI SEKITARMU (BEST SELLERS)
               ========================================================= */}
           {bestSellers.length > 0 && (
-            <div class="mt-4 pb-2">
+            <div class="mt-4 pb-2 w-full overflow-hidden">
               <div class="px-4 flex justify-between items-center mb-3">
                 <h3 class="text-base font-black text-gray-900 dark:text-white flex items-center gap-1.5">
                   <span class="text-xl">🔥</span> Paling Laku di Sekitarmu
                 </h3>
               </div>
               
-              <div class="flex overflow-x-auto snap-x snap-mandatory gap-2.5 px-4 hide-scrollbar pb-4 pt-1">
+              <div class="flex overflow-x-auto snap-x snap-mandatory gap-2.5 px-4 hide-scrollbar pb-4 pt-1 w-full">
                 {bestSellers.map((item: any, index: number) => {
                   const isOutOfStock = item.stock === 0;
                   const currentPrice = item.is_promo ? item.promo_price : item.price;
