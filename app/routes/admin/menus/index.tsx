@@ -1,7 +1,7 @@
 import { createRoute } from 'honox/factory'
 
 export default createRoute(async (c) => {
-  // 1. Tarik seluruh daftar gerai untuk Tenant Selector Dropdown
+  // 1. Ambil daftar gerai restoran
   const { results: outlets } = await c.env.DB.prepare(
     'SELECT id, name, address FROM restaurants ORDER BY created_at ASC'
   ).all();
@@ -17,29 +17,30 @@ export default createRoute(async (c) => {
     return c.redirect('/admin/menus?restaurant_id=' + defaultId);
   }
 
-  // 2. Tarik Kategori Menu berdasarkan Gerai yang dipilih
+  // 2. Tarik data dari tabel baru: menu_categories (diurutkan berdasarkan sort_order)
   const { results: categories } = await c.env.DB.prepare(
-    'SELECT id, name, description FROM menus WHERE restaurant_id = ? ORDER BY created_at DESC'
+    'SELECT id, name, description, sort_order, is_active FROM menu_categories WHERE restaurant_id = ? ORDER BY sort_order ASC, created_at DESC'
   ).bind(activeOutletId).all();
 
-  // 3. Tarik Item Produk relasional lengkap dengan kolom Promo & HPP terbaru
+  // 3. Tarik data item produk menggunakan category_id
   const { results: menuItems } = await c.env.DB.prepare(
-    'SELECT id, menu_id, name, description, price, image, is_available, stock, is_promo, promo_price, end_promo_time, hpp FROM menu_items ORDER BY created_at DESC'
+    'SELECT id, category_id, name, description, price, image, is_available, stock, is_promo, promo_price, end_promo_time, hpp FROM menu_items ORDER BY created_at DESC'
   ).all();
 
-  // Mapping Item berdasarkan ID Kategori
+  // Pemetaan item produk ke dalam grup kategori barunya
   const itemsByCategory = menuItems.reduce((acc: any, item: any) => {
-    if (!acc[item.menu_id]) acc[item.menu_id] = [];
-    acc[item.menu_id].push(item);
+    const catId = item.category_id || item.menu_id; // fallback toleransi migrasi data
+    if (!acc[catId]) acc[catId] = [];
+    acc[catId].push(item);
     return acc;
   }, {});
 
   const currencyFormatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 
   return c.render(
-    <div class="space-y-6 animate-fade-in relative">
+    <div class="space-y-6 relative">
       
-      {/* BAR ATAS: SELEKTOR GERAI & AKSI */}
+      {/* TOOLBAR ATAS */}
       <div class="bg-white dark:bg-darkpanel p-5 rounded-2xl border border-gray-100 dark:border-darkborder flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm">
         <div class="w-full sm:w-auto">
           <label class="block text-[11px] font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-1.5">Pilih Unit Gerai / Restoran</label>
@@ -65,7 +66,7 @@ export default createRoute(async (c) => {
         </div>
       </div>
 
-      {/* STRUKTUR LIST KATALOG UTAMA */}
+      {/* RENDER LIST GRUP KATEGORI DARI TABEL BARU */}
       {categories.length === 0 ? (
         <div class="bg-white dark:bg-darkpanel p-12 rounded-2xl border border-gray-100 dark:border-darkborder text-center shadow-sm">
           <h3 class="text-base font-bold text-gray-800 dark:text-white">Katalog Unit Masih Kosong</h3>
@@ -74,18 +75,22 @@ export default createRoute(async (c) => {
       ) : (
         <div class="space-y-6">
           {categories.map((cat: any) => (
-            <div class="bg-white dark:bg-darkpanel rounded-2xl border border-gray-100 dark:border-darkborder shadow-sm overflow-hidden">
+            <div class={`bg-white dark:bg-darkpanel rounded-2xl border border-gray-100 dark:border-darkborder shadow-sm overflow-hidden ${cat.is_active === 0 ? 'opacity-60 grayscale-[30%]' : ''}`}>
+              
+              {/* HEADER KATEGORI */}
               <div class="px-5 py-4 bg-gray-50 dark:bg-darkbg/40 border-b border-gray-100 dark:border-darkborder flex justify-between items-center">
                 <div>
                   <h4 class="font-bold text-gray-800 dark:text-white flex items-center gap-2">
                     <span class="w-1.5 h-4 bg-primary rounded-full"></span>
                     {cat.name}
+                    {cat.is_active === 0 && <span class="text-[9px] bg-gray-200 dark:bg-gray-700 text-gray-500 px-1.5 py-0.5 rounded font-bold">NONAKTIF</span>}
                   </h4>
-                  <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{cat.description || 'Tidak ada deskripsi'}</p>
+                  <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">Urutan: {cat.sort_order} • {cat.description || 'Tidak ada deskripsi'}</p>
                 </div>
                 <button onclick={`deleteCategory('${cat.id}')`} class="text-xs font-bold text-red-500 bg-red-500/10 hover:bg-red-500/20 px-2.5 py-1 rounded-lg transition-colors">Hapus</button>
               </div>
 
+              {/* GRID ITEM PRODUK */}
               <div class="p-5">
                 {!itemsByCategory[cat.id] || itemsByCategory[cat.id].length === 0 ? (
                   <p class="text-xs text-gray-400 dark:text-gray-500 text-center py-2 italic">Belum ada item produk di bawah kategori ini.</p>
@@ -108,15 +113,14 @@ export default createRoute(async (c) => {
                               <div class="flex items-start justify-between gap-1">
                                 <h5 class="font-bold text-gray-800 dark:text-gray-200 text-sm truncate pr-4">{item.name}</h5>
                                 <button 
-                                  onclick={`openProductModal('${item.id}', '${item.menu_id}', '${item.name.replace(/'/g, "\\'")}', '${(item.description || '').replace(/'/g, "\\'")}', ${item.price}, ${item.stock}, ${item.is_available}, ${item.is_promo}, ${item.promo_price}, '${item.end_promo_time || ''}', ${item.hpp}, '${item.image || ''}')`}
+                                  onclick={`openProductModal('${item.id}', '${item.category_id || item.menu_id}', '${item.name.replace(/'/g, "\\'")}', '${(item.description || '').replace(/'/g, "\\'")}', ${item.price}, ${item.stock}, ${item.is_available}, ${item.is_promo}, ${item.promo_price}, '${item.end_promo_time || ''}', ${item.hpp}, '${item.image || ''}')`}
                                   class="text-gray-400 hover:text-primary transition-colors"
-                                  title="Edit Produk"
+                                  title="Edit"
                                 >
                                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                                 </button>
                               </div>
                               
-                              {/* RENDER HARGA PROMO CORET */}
                               <div class="mt-1 flex items-baseline gap-1.5 flex-wrap">
                                 {isPromoActive ? (
                                   <>
@@ -128,16 +132,14 @@ export default createRoute(async (c) => {
                                 )}
                               </div>
 
-                              {/* HITUNG MUNDUR / INFO SISA WAKTU PROMO */}
                               {isPromoActive && item.end_promo_time && (
                                 <span class="inline-block text-[9px] bg-red-500/10 text-red-500 font-bold px-1.5 py-0.5 rounded mt-0.5 max-w-full truncate">
-                                  ⏰ Berakhir: {new Date(item.end_promo_time).toLocaleDateString('id-ID')} {new Date(item.end_promo_time).toLocaleTimeString('id-ID', {hour: '2-digit', minute:'2-digit'})}
+                                  ⏰ {new Date(item.end_promo_time).toLocaleDateString('id-ID')}
                                 </span>
                               )}
                             </div>
                             
                             <div class="mt-2 pt-1 border-t border-gray-100 dark:border-darkborder space-y-1 text-[11px]">
-                              {/* LIVE STOCK & PROFIT MARGIN INFRASTRUCTURE */}
                               <div class="flex justify-between items-center text-gray-400">
                                 <span>Stok: <strong class="text-gray-700 dark:text-gray-300 font-mono font-bold">{item.stock} unit</strong></span>
                                 <span class={`font-bold px-1.5 py-0.2 rounded text-[10px] ${item.is_available === 1 ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>
@@ -145,7 +147,7 @@ export default createRoute(async (c) => {
                                 </span>
                               </div>
                               <div class="flex justify-between items-center text-gray-400 border-t border-dashed border-gray-200/50 dark:border-gray-700/50 pt-1">
-                                <span>Modal (HPP): <span class="font-mono">{currencyFormatter.format(item.hpp || 0)}</span></span>
+                                <span>Modal: <span class="font-mono">{currencyFormatter.format(item.hpp || 0)}</span></span>
                                 <span class="text-green-500 font-medium">Laba: {currencyFormatter.format(profitMargin)}</span>
                               </div>
                             </div>
@@ -165,7 +167,7 @@ export default createRoute(async (c) => {
         </div>
       )}
 
-      {/* --- DIALOG MODAL: TAMBAH KATEGORI --- */}
+      {/* MODAL: BUAT KATEGORI BARU */}
       <div id="categoryModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white dark:bg-darkpanel rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform scale-95 transition-all border dark:border-darkborder" id="categoryModalInner">
           <div class="p-5 border-b border-gray-100 dark:border-darkborder flex justify-between items-center bg-gray-50 dark:bg-darkbg/40">
@@ -176,7 +178,20 @@ export default createRoute(async (c) => {
             <input type="hidden" id="cat_restaurant_id" value={activeOutletId} />
             <div>
               <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Nama Kategori</label>
-              <input type="text" id="cat_name" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm focus:border-primary" required />
+              <input type="text" id="cat_name" placeholder="Contoh: Makanan Utama, Dessert" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm focus:border-primary" required />
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Urutan Urut (*Sort Order*)</label>
+                <input type="number" id="cat_sort" value="0" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm font-mono" required />
+              </div>
+              <div>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Status Aktivitas Grup</label>
+                <select id="cat_active" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-xs font-bold text-gray-800 dark:text-white outline-none">
+                  <option value="1">Aktif Tampilkan</option>
+                  <option value="0">Sembunyikan Sementara</option>
+                </select>
+              </div>
             </div>
             <div>
               <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Keterangan Deskripsi</label>
@@ -187,7 +202,7 @@ export default createRoute(async (c) => {
         </div>
       </div>
 
-      {/* --- DIALOG MODAL: TAMBAH/EDIT PRODUK --- */}
+      {/* MODAL: TAMBAH/EDIT PRODUK */}
       <div id="productModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white dark:bg-darkpanel rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden transform scale-95 transition-all border dark:border-darkborder" id="productModalInner">
           <div class="p-5 border-b border-gray-100 dark:border-darkborder flex justify-between items-center bg-gray-50 dark:bg-darkbg/40">
@@ -198,7 +213,7 @@ export default createRoute(async (c) => {
             <input type="hidden" id="prod_id" />
             <div>
               <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Target Penempatan Kategori</label>
-              <select id="prod_menu_id" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-sm font-bold text-gray-800 dark:text-white outline-none" required>
+              <select id="prod_category_id" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-sm font-bold text-gray-800 dark:text-white outline-none" required>
                 <option value="" disabled selected>-- Tentukan Kategori --</option>
                 {categories.map((c: any) => <option value={c.id}>{c.name}</option>)}
               </select>
@@ -210,7 +225,7 @@ export default createRoute(async (c) => {
             
             <div class="grid grid-cols-3 gap-3">
               <div>
-                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Harga Jual (Rp)</label>
+                <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Harga Jual Normal (Rp)</label>
                 <input type="number" id="prod_price" class="w-full px-3 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm font-mono" required />
               </div>
               <div>
@@ -223,7 +238,6 @@ export default createRoute(async (c) => {
               </div>
             </div>
 
-            {/* SEKTOR KONTROL INTERAKTIF PROMO */}
             <div class="p-4 bg-red-500/5 rounded-xl border border-red-500/10 space-y-3">
               <div class="flex items-center gap-2">
                 <input type="checkbox" id="prod_is_promo" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer" onchange="togglePromoFields()" />
@@ -233,11 +247,11 @@ export default createRoute(async (c) => {
               <div id="promo_inputs_group" class="grid grid-cols-2 gap-3 transition-opacity duration-200">
                 <div>
                   <label class="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Harga Promo Terpotong (Rp)</label>
-                  <input type="number" id="prod_promo_price" class="w-full px-3 py-1.5 bg-white dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-lg text-sm font-mono text-gray-800 dark:text-white outline-none focus:border-primary" />
+                  <input type="number" id="prod_promo_price" class="w-full px-3 py-1.5 bg-white dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-lg text-sm font-mono text-gray-800 dark:text-white outline-none" />
                 </div>
                 <div>
                   <label class="block text-[11px] font-semibold text-gray-500 dark:text-gray-400 mb-1">Batas Waktu Berakhir Promo</label>
-                  <input type="datetime-local" id="prod_end_promo_time" class="w-full px-3 py-1.5 bg-white dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-lg text-xs font-mono text-gray-800 dark:text-white outline-none focus:border-primary" />
+                  <input type="datetime-local" id="prod_end_promo_time" class="w-full px-3 py-1.5 bg-white dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-lg text-xs font-mono text-gray-800 dark:text-white outline-none" />
                 </div>
               </div>
             </div>
@@ -252,7 +266,7 @@ export default createRoute(async (c) => {
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">Deskripsi Ringkas</label>
-                <input type="text" id="prod_desc" placeholder="Info porsi, level pedas, dsb..." class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm" />
+                <input type="text" id="prod_desc" class="w-full px-4 py-2 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-darkborder rounded-xl text-gray-800 dark:text-white outline-none text-sm" />
               </div>
             </div>
             
@@ -268,7 +282,7 @@ export default createRoute(async (c) => {
         </div>
       </div>
 
-      {/* SCRIPT TRANSPOR DATA ASINKRONUS & EDIT FILL POPULATOR */}
+      {/* SCRIPT KONTROL UI */}
       <script dangerouslySetInnerHTML={{ __html: `
         function getAuthToken() {
           return document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1];
@@ -291,57 +305,51 @@ export default createRoute(async (c) => {
         async function handleDirectR2Upload(inputElement) {
           const file = inputElement.files[0];
           if(!file) return;
-
           const statusBox = document.getElementById('upload-status');
-          statusBox.innerText = 'Mengalirkan biner ke R2 CDN...';
+          statusBox.innerText = 'Mengunggah...';
           statusBox.className = 'text-xs text-blue-500 font-bold mt-2 block animate-pulse';
-
-          const token = getAuthToken();
           const formData = new FormData();
           formData.append('file', file);
-
           try {
             const res = await fetch('/api/v1/protected/admin/uploads', {
-              method: 'POST', headers: { 'Authorization': 'Bearer ' + token }, body: formData
+              method: 'POST', headers: { 'Authorization': 'Bearer ' + getAuthToken() }, body: formData
             });
             const data = await res.json();
             if(data.success || data.url) {
               document.getElementById('prod_image_url').value = data.url || data.filePath;
-              statusBox.innerText = '✓ Berhasil disimpan di R2 CDN Storage';
+              statusBox.innerText = '✓ Berhasil diunggah ke CDN R2';
               statusBox.className = 'text-xs text-green-500 font-bold mt-2 block';
             }
           } catch(err) {
-            statusBox.innerText = '✕ Kesalahan transmisi R2.';
+            statusBox.innerText = '✕ Gagal upload.';
             statusBox.className = 'text-xs text-red-500 font-bold mt-2 block';
           }
         }
 
         function openProductModalGlobal() {
-          const sel = document.getElementById('prod_menu_id');
+          const sel = document.getElementById('prod_category_id');
           if(sel.options.length <= 1) {
-            alert('Harap buat Kategori Menu terlebih dahulu untuk gerai ini!');
+            alert('Harap buat Kategori Menu terlebih dahulu!');
             openCategoryModal();
             return;
           }
           openProductModal('', '', '', '', '', 50, 1, 0, 0, '', 0, '');
         }
 
-        function openProductModal(id='', menuId='', name='', desc='', price='', stock='50', available='1', isPromo='0', promoPrice='0', endTime='', hpp='0', img='') {
+        function openProductModal(id='', catId='', name='', desc='', price='', stock='50', available='1', isPromo='0', promoPrice='0', endTime='', hpp='0', img='') {
           document.getElementById('productModalTitle').innerText = id ? 'Konfigurasi Edit Menu Produk' : 'Tambah Menu Produk Baru';
           document.getElementById('prod_id').value = id;
-          document.getElementById('prod_menu_id').value = menuId;
+          document.getElementById('prod_category_id').value = catId;
           document.getElementById('prod_name').value = name;
           document.getElementById('prod_desc').value = desc;
           document.getElementById('prod_price').value = price;
           document.getElementById('prod_stock').value = stock;
           document.getElementById('prod_hpp').value = hpp;
           document.getElementById('prod_available').value = available;
-          
           document.getElementById('prod_is_promo').checked = parseInt(isPromo) === 1;
           document.getElementById('prod_promo_price').value = promoPrice;
           document.getElementById('prod_end_promo_time').value = endTime ? endTime.substring(0,16) : '';
           document.getElementById('prod_image_url').value = img;
-          
           togglePromoFields();
 
           const modal = document.getElementById('productModal');
@@ -362,9 +370,12 @@ export default createRoute(async (c) => {
           const payload = {
             restaurant_id: document.getElementById('cat_restaurant_id').value,
             name: document.getElementById('cat_name').value,
+            sort_order: parseInt(document.getElementById('cat_sort').value) || 0,
+            is_active: parseInt(document.getElementById('cat_active').value),
             description: document.getElementById('cat_desc').value
           };
-          await fetch('/api/v1/protected/admin/menus', {
+          // Poin endpoint simpan diarahkan ke tabel kategori baru
+          await fetch('/api/v1/protected/admin/menu-categories', {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
             body: JSON.stringify(payload)
           });
@@ -374,7 +385,7 @@ export default createRoute(async (c) => {
         async function submitProduct() {
           const id = document.getElementById('prod_id').value;
           const payload = {
-            menu_id: document.getElementById('prod_menu_id').value,
+            category_id: document.getElementById('prod_category_id').value,
             name: document.getElementById('prod_name').value,
             description: document.getElementById('prod_desc').value,
             price: parseInt(document.getElementById('prod_price').value) || 0,
@@ -386,21 +397,18 @@ export default createRoute(async (c) => {
             end_promo_time: document.getElementById('prod_end_promo_time').value || null,
             image: document.getElementById('prod_image_url').value || null
           };
-
           const method = id ? 'PUT' : 'POST';
           const endpoint = id ? '/api/v1/protected/admin/menu-items/' + id : '/api/v1/protected/admin/menu-items';
-
           const res = await fetch(endpoint, {
             method: method, headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAuthToken() },
             body: JSON.stringify(payload)
           });
           if(res.ok) window.location.reload();
-          else alert('Gagal memproses penyimpanan.');
         }
 
         async function deleteCategory(id) {
-          if(!confirm('Hapus kategori beserta produk didalamnya?')) return;
-          await fetch('/api/v1/protected/admin/menus/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
+          if(!confirm('Hapus kategori?')) return;
+          await fetch('/api/v1/protected/admin/menu-categories/' + id, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + getAuthToken() } });
           window.location.reload();
         }
 
