@@ -1,7 +1,6 @@
 import { createRoute } from 'honox/factory'
 
 export default createRoute(async (c) => {
-  // Ambil status konfigurasi saat render awal agar UI langsung menyesuaikan
   const config = await c.env.DB.prepare('SELECT * FROM config WHERE id = 1').first<any>();
   const isConnected = !!(config && config.access_token);
   const merchantName = config?.merchant_name || 'Belum Terhubung';
@@ -9,7 +8,7 @@ export default createRoute(async (c) => {
 
   return c.render(
     <div class="space-y-6 pb-10">
-      {/* Dependency Eksternal untuk QRIS Scanner & Notifikasi (SweetAlert2) */}
+      {/* Dependency Eksternal */}
       <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
       <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
@@ -106,7 +105,7 @@ export default createRoute(async (c) => {
         <div id="view-qris" class="tab-content hidden space-y-6">
           <div class="bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-700/50 p-4 rounded-xl flex gap-3 text-sm text-yellow-800 dark:text-yellow-400">
             <svg class="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg>
-            <p><strong>Penting:</strong> Unggah gambar kode QRIS Statis dari gerai Anda. Sistem akan mengekstrak kode RAW-nya untuk disuntikkan nominal unik (QRIS Dinamis).</p>
+            <p><strong>Penting:</strong> Unggah gambar kode QRIS Statis dari gerai Anda. Sistem akan mengekstrak kode RAW-nya untuk disuntikkan nominal unik.</p>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -156,7 +155,7 @@ export default createRoute(async (c) => {
 
           <div class="bg-gray-50 dark:bg-darkbg p-5 rounded-2xl border border-gray-100 dark:border-gray-700 max-w-xl">
             <h3 class="font-bold text-gray-800 dark:text-white mb-4">Pengaturan Webhook GoBiz</h3>
-            <p class="text-xs text-gray-500 mb-3 leading-relaxed">Sistem akan secara otomatis menyetel URL Webhook Gojek Anda agar mengarah ke server ini (tanpa perlu diteruskan ke tempat lain).</p>
+            <p class="text-xs text-gray-500 mb-3 leading-relaxed">Sistem akan secara otomatis menyetel URL Webhook Gojek Anda agar mengarah ke server ini.</p>
             
             <label class="block text-xs font-bold text-gray-500 mb-1">Target URL Server Ini (Otomatis)</label>
             <input id="s_url" class="w-full px-3 py-2 bg-gray-200 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono mb-3 outline-none text-gray-500 cursor-not-allowed" readonly />
@@ -172,14 +171,14 @@ export default createRoute(async (c) => {
 
       {/* JAVASCRIPT KONTROL LOGIKA */}
       <script dangerouslySetInnerHTML={{ __html: `
-        // HELPER: Ambil token admin dari cookie untuk mengamankan request API internal
+        // HELPER API LOKAL -> URL MENGARAH KE /api/v1/protected/admin/gobiz/* SEKARANG
         function getAdminToken() {
           return document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1] || '';
         }
 
         const api = {
-          get: (url) => fetch('/api/v1' + url, { headers: { 'x-admin-token': getAdminToken() } }).then(r => r.json()),
-          post: (url, body) => fetch('/api/v1' + url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-token': getAdminToken() }, body: JSON.stringify(body) }).then(r => r.json())
+          get: (url) => fetch('/api/v1/protected/admin/gobiz' + url, { headers: { 'Authorization': 'Bearer ' + getAdminToken() } }).then(r => r.json()),
+          post: (url, body) => fetch('/api/v1/protected/admin/gobiz' + url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAdminToken() }, body: JSON.stringify(body) }).then(r => r.json())
         };
 
         // NAVIGASI TABS
@@ -195,8 +194,7 @@ export default createRoute(async (c) => {
           if(id === 'dash') loadDashboardData();
           if(id === 'qris') loadInjectorLog();
           if(id === 'webh') {
-             // Set otomatis URL Webhook ke server saat ini
-             document.getElementById('s_url').value = window.location.origin + '/api/v1/webhook';
+             document.getElementById('s_url').value = window.location.origin + '/webhook';
           }
         }
 
@@ -211,7 +209,7 @@ export default createRoute(async (c) => {
           btn.innerText = 'Mengirim...'; btn.disabled = true;
 
           try {
-            const res = await api.post('/auth/login', { email });
+            const res = await api.post('/login', { email });
             if(res.status === 'success') {
               document.getElementById('step-email').classList.add('hidden');
               document.getElementById('step-otp').classList.remove('hidden');
@@ -235,7 +233,7 @@ export default createRoute(async (c) => {
           };
 
           try {
-            const res = await api.post('/auth/verify', payload);
+            const res = await api.post('/verify', payload);
             if(res.status === 'success') {
               Swal.fire('Sukses', 'Berhasil terhubung ke GoBiz!', 'success').then(() => location.reload());
             } else {
@@ -250,7 +248,7 @@ export default createRoute(async (c) => {
 
         async function logoutGoBiz() {
           if(confirm('Yakin ingin memutuskan koneksi dengan GoBiz?')) {
-            await api.post('/auth/logout', {});
+            await api.post('/logout', {});
             location.reload();
           }
         }
@@ -322,14 +320,14 @@ export default createRoute(async (c) => {
           const max = document.getElementById('c_max').value;
           const raw = document.getElementById('c_raw').value;
           
-          await api.post('/api/config/range', { min, max });
-          await api.post('/api/config/master-qr', { raw_qris: raw });
+          await api.post('/config/range', { min, max });
+          await api.post('/config/master-qr', { raw_qris: raw });
           Swal.fire('Sukses', 'Konfigurasi QRIS berhasil disimpan', 'success');
         }
 
         async function loadInjectorLog() {
           try {
-            const res = await api.get('/api/trx/list');
+            const res = await api.get('/trx/list');
             const tbody = document.getElementById('t-gen');
             if(res.transactions && res.transactions.length > 0) {
               tbody.innerHTML = res.transactions.map(x => \`
@@ -353,14 +351,13 @@ export default createRoute(async (c) => {
             webhook_url: document.getElementById('s_url').value,
             email: document.getElementById('s_mail').value || ''
           };
-          const res = await api.post('/api/gobiz/update-webhook', payload);
+          const res = await api.post('/update-webhook', payload);
           if(res.status === 'success') Swal.fire('Berhasil', 'URL Webhook GoBiz berhasil di-update!', 'success');
           else Swal.fire('Gagal', res.error || 'Ditolak Gojek', 'error');
         }
 
         // INIT SAAT PERTAMA LOAD
         document.addEventListener('DOMContentLoaded', () => {
-          // Buka tab Auth secara default jika belum connect, jika connect buka Dashboard
           const isConnected = ${isConnected};
           if(isConnected) switchTab('dash');
         });
