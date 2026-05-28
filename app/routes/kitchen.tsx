@@ -1,6 +1,18 @@
 import { createRoute } from 'honox/factory'
+import { getCookie } from 'hono/cookie'
+import { verify } from 'hono/jwt'
 
 export default createRoute(async (c) => {
+  // ==========================================
+  // PROTEKSI HALAMAN (WAJIB LOGIN ADMIN)
+  // ==========================================
+  const token = getCookie(c, 'admin_token');
+  if (!token) return c.redirect('/login');
+  try {
+    const payload = await verify(token, c.env.JWT_SECRET, 'HS256');
+    if (payload.role !== 'ADMIN') return c.redirect('/login');
+  } catch (e) { return c.redirect('/login'); }
+
   const db = c.env.DB;
 
   if (c.req.method === 'POST') {
@@ -88,7 +100,6 @@ export default createRoute(async (c) => {
 
       <script dangerouslySetInnerHTML={{ __html: `
         setInterval(() => window.location.reload(), 10000);
-
         async function updateKitchen(orderId, actionType) {
             try {
               const res = await fetch('/kitchen', {
