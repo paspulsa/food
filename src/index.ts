@@ -14,6 +14,7 @@ import { orderRouter } from './routes/orders';
 import { uploadRouter } from './routes/uploads';
 import { menuCategoryRouter } from './routes/menuCategories';
 import { promoRouter } from './routes/promos';
+import { couponRouter } from './routes/coupons';
 
 // Inisialisasi Aplikasi Hono dengan Base Path
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>().basePath('/api/v1');
@@ -34,6 +35,7 @@ app.route('/public/restaurants', restaurantRouter);
 app.route('/public/menus', menuRouter);
 app.route('/public/menu-items', menuItemRouter);
 app.route('/public/menu-categories', menuCategoryRouter);
+app.route('/public/coupons', couponRouter);
 
 // ==========================================
 // 2. MIDDLEWARE JWT GLOBAL (Area Terproteksi)
@@ -73,5 +75,6 @@ app.route('/protected/admin/menu-items', menuItemRouter);
 app.route('/protected/admin/orders', orderRouter);
 app.route('/protected/admin/uploads', uploadRouter);
 app.route('/protected/admin/promos', promoRouter);
+app.route('/protected/admin/coupons', couponRouter);
 
 export default app;
