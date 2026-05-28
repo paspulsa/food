@@ -59,6 +59,7 @@ export default createRoute(async (c) => {
     'SELECT id, category_id, name, description, price, promo_price, is_promo, image, stock, is_available, is_custom, custom_options FROM menu_items WHERE is_available = 1 AND is_promo = 0 ORDER BY created_at DESC LIMIT 10'
   ).all();
 
+  // TARIK SEMUA PRODUK: Digunakan untuk fungsi filter & detail produk di keranjang
   const { results: allAvailableItems } = await c.env.DB.prepare(
     'SELECT id, category_id, name, description, price, promo_price, is_promo, image, stock, is_available, is_custom, custom_options FROM menu_items WHERE is_available = 1 ORDER BY created_at DESC'
   ).all();
@@ -131,7 +132,7 @@ export default createRoute(async (c) => {
           )}
 
           {/* =========================================================
-              KATEGORI GRID (DENGAN EFEK HOVER ZOOM ELEGAN 175%)
+              KATEGORI GRID
               ========================================================= */}
           <div class="px-4 mt-4">
             <div class="grid grid-cols-6 gap-y-4 gap-x-1 sm:gap-x-2">
@@ -170,7 +171,7 @@ export default createRoute(async (c) => {
               PALING LAKU DI SEKITARMU (BEST SELLERS)
               ========================================================= */}
           {bestSellers.length > 0 && (
-            <div class="mt-4">
+            <div class="mt-4 pb-2">
               <div class="px-4 flex justify-between items-center mb-3">
                 <h3 class="text-base font-black text-gray-900 dark:text-white flex items-center gap-1.5">
                   <span class="text-xl">🔥</span> Paling Laku di Sekitarmu
@@ -228,7 +229,7 @@ export default createRoute(async (c) => {
           <div class="h-2 bg-gray-100 dark:bg-gray-900 w-full"></div>
 
           {/* =========================================================
-              FLASH SALE / PROMO GERCEP (CARD LEBIH BESAR, CAROUSEL)
+              FLASH SALE / PROMO GERCEP (CARD LEBIH BESAR)
               ========================================================= */}
           {promoItems.length > 0 && (
             <div class="mt-4">
@@ -405,6 +406,7 @@ export default createRoute(async (c) => {
                  <span id="pdm-original-price" class="text-xs font-bold text-gray-400 dark:text-gray-500 line-through hidden"></span>
               </div>
               
+              {/* Tempat Injeksi Opsi Custom HTML (SPOILER / ACCORDION) */}
               <div id="pdm-custom-container" class="mt-6 space-y-3"></div>
             </div>
 
@@ -455,7 +457,7 @@ export default createRoute(async (c) => {
       </div>
 
       {/* =========================================================
-          SCRIPT INTERAKTIF (CLIENT-SIDE JS MURNI)
+          SCRIPT INTERAKTIF LENGKAP PENGELOLA KERANJANG (LOCALSTORAGE)
           ========================================================= */}
       <script dangerouslySetInnerHTML={{ __html: `
         // DATA GLOBAL
@@ -463,8 +465,8 @@ export default createRoute(async (c) => {
         const PRODUCTS = ${safeItemsJson};
         const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
         
-        let cartItems = 0;
-        let cartTotal = 0;
+        // ARRAY KERANJANG SESUNGGUHNYA (TERHUBUNG KE LOCALSTORAGE)
+        let cart = JSON.parse(localStorage.getItem('spos_cart')) || [];
         
         let currentActiveProduct = null;
         let currentQty = 1;
@@ -483,7 +485,88 @@ export default createRoute(async (c) => {
           setTimeout(() => { toast.classList.add('opacity-0', 'translate-y-4'); setTimeout(() => toast.remove(), 300); }, 2500);
         }
 
-        // --- 2. LOKASI GPS & MODAL LOKASI ---
+        // --- 2. PENYIMPANAN & UPDATE BADGE KERANJANG ---
+        function saveCart() {
+          localStorage.setItem('spos_cart', JSON.stringify(cart));
+          updateCartBadge();
+        }
+
+        function updateCartBadge() {
+          let totalItems = 0;
+          cart.forEach(item => { totalItems += item.qty; });
+          const badge = document.getElementById('nav-cart-badge');
+          if (badge) {
+            if (totalItems > 0) {
+              badge.innerText = totalItems;
+              badge.classList.remove('hidden');
+              badge.style.transform = 'scale(1.4)';
+              setTimeout(() => badge.style.transform = 'scale(1)', 200);
+            } else {
+              badge.classList.add('hidden');
+            }
+          }
+        }
+
+        // --- 3. FUNGSI KERANJANG STANDAR (DARI TOMBOL LANGSUNG) ---
+        function addToCart(id, name, price) {
+          const product = PRODUCTS.find(p => p.id === id);
+          if (!product) return;
+
+          // Cek apakah item tanpa varian (note kosong) sudah ada di keranjang
+          const existingIndex = cart.findIndex(item => item.id === id && !item.note);
+          
+          if (existingIndex > -1) {
+              cart[existingIndex].qty += 1;
+          } else {
+              cart.push({
+                  id: id,
+                  name: name,
+                  price: price,
+                  image: product.image || 'https://via.placeholder.com/150',
+                  qty: 1,
+                  additional_price: 0,
+                  note: ''
+              });
+          }
+          
+          saveCart();
+          showToast(name + ' ditambahkan ke pesanan!');
+        }
+
+        // --- 4. FUNGSI KERANJANG MODAL (PRODUK DENGAN OPSI CUSTOM) ---
+        function submitProductToCart() {
+           // Kumpulkan catatan dari input radio/checkbox yang dipilih
+           let noteArr = [];
+           const inputs = document.querySelectorAll('#pdm-custom-container input:checked');
+           inputs.forEach(input => { 
+               const labelSpan = input.nextElementSibling;
+               if(labelSpan) noteArr.push(labelSpan.innerText);
+           });
+           const noteStr = noteArr.join(', ');
+
+           // Cek apakah produk dengan varian kustom yang SAMA PERSIS sudah ada di keranjang
+           const existingIndex = cart.findIndex(item => item.id === currentActiveProduct.id && item.note === noteStr);
+           
+           if (existingIndex > -1) {
+               cart[existingIndex].qty += currentQty;
+           } else {
+               cart.push({
+                   id: currentActiveProduct.id,
+                   name: currentActiveProduct.name,
+                   price: basePrice,
+                   image: currentActiveProduct.image || 'https://via.placeholder.com/150',
+                   qty: currentQty,
+                   additional_price: additionalPrice, // Harga tambahan per item dari custom options
+                   note: noteStr
+               });
+           }
+           
+           saveCart();
+           showToast(currentActiveProduct.name + ' ditambahkan ke pesanan!');
+           closeProductDetail();
+        }
+
+        // --- 5. LOGIKA LOKASI, PROMO, LIVE SEARCH, DLL (TETAP SAMA SEPERTI ASLINYA) ---
         function initLocation() {
           const locElement = document.getElementById('user-location');
           const arrowIcon = '<svg class="w-4 h-4 ml-1 flex-shrink-0 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>';
@@ -580,7 +663,6 @@ export default createRoute(async (c) => {
           }
         }
 
-        // --- 3. MODAL PROMO AWAL ---
         function initPromoModal() {
           const modal = document.getElementById('promo-modal');
           if (!modal) return;
@@ -604,7 +686,6 @@ export default createRoute(async (c) => {
           setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
         }
 
-        // --- 4. LIVE SEARCH & OUTSIDE CLICK ---
         function handleSearch(query) {
           const resultsContainer = document.getElementById('search-results');
           
@@ -649,7 +730,6 @@ export default createRoute(async (c) => {
           }
         });
 
-        // --- 5. FILTER KATEGORI INSTAN SPA ---
         function showCategory(categoryId, categoryName) {
           const container = document.getElementById('dynamic-category-container');
           const titleName = document.getElementById('dynamic-category-name');
@@ -696,20 +776,6 @@ export default createRoute(async (c) => {
           setTimeout(() => { container.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50);
         }
 
-        // --- 6. LOGIKA KERANJANG STANDAR ---
-        function addToCart(id, name, price) {
-          cartItems += 1;
-          cartTotal += price;
-          const badge = document.getElementById('nav-cart-badge');
-          badge.innerText = cartItems;
-          badge.classList.remove('hidden');
-          badge.style.transform = 'scale(1.4)';
-          setTimeout(() => badge.style.transform = 'scale(1)', 200);
-
-          showToast(name + ' ditambahkan ke pesanan!');
-        }
-
-        // --- 7. LOGIKA MODAL BOTTOM SHEET DETAIL PRODUK & KUSTOMISASI JSON ---
         function openProductDetail(id) {
           const item = PRODUCTS.find(p => p.id === id);
           if(!item) return;
@@ -812,27 +878,11 @@ export default createRoute(async (c) => {
            document.getElementById('pdm-total-btn-price').innerText = formatter.format(total);
         }
 
-        function submitProductToCart() {
-           const finalPrice = (basePrice + additionalPrice) * currentQty;
-           for(let i=0; i < currentQty; i++){
-              cartItems += 1;
-              cartTotal += (basePrice + additionalPrice);
-           }
-           
-           const badge = document.getElementById('nav-cart-badge');
-           badge.innerText = cartItems;
-           badge.classList.remove('hidden');
-           badge.style.transform = 'scale(1.4)';
-           setTimeout(() => badge.style.transform = 'scale(1)', 200);
-
-           showToast(currentActiveProduct.name + ' ditambahkan ke pesanan!');
-           closeProductDetail();
-        }
-
-        // --- INISIALISASI SAAT DOM DIMUAT ---
+        // INIT LOAD
         document.addEventListener('DOMContentLoaded', () => {
           initLocation();
           initPromoModal();
+          updateCartBadge();
         });
       `}} />
     </div>
