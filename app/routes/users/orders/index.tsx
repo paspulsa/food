@@ -23,7 +23,6 @@ export default createRoute(async (c) => {
   }
 
   // Tarik Data Riwayat Pesanan User
-  // Mengakomodasi fallback field total_price (skema baru) atau total_amount (skema lama)
   const { results: orders } = await c.env.DB.prepare(
     'SELECT id, status, COALESCE(total_price, total_amount) as grand_total, created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC'
   ).bind(userId).all();
@@ -131,5 +130,5 @@ export default createRoute(async (c) => {
 
       </div>
     </div>
-  , { title: 'Riwayat Pesanan - ShopeeFood Clone' })
+  , { title: 'Riwayat Pesanan - Kedai Pangsit Kembar 88' })
 })
