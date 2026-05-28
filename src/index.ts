@@ -16,34 +16,42 @@ import { menuCategoryRouter } from './routes/menuCategories';
 import { promoRouter } from './routes/promos';
 import { couponRouter } from './routes/coupons';
 import { gobizRouter } from './routes/gobiz';
-import { webhookRouter } from './routes/webhook';
+import { webhookRouter } from './routes/webhook'; // <--- IMPORT ROUTER BARU
 
-// Inisialisasi Aplikasi Hono dengan Base Path
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>().basePath('/api/v1');
+const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // Middleware Global
 app.use('*', logger());
 app.use('*', cors({
-  origin: '*', // Di produksi, ganti dengan domain spesifik Cloudflare Pages Admin Anda
+  origin: '*',
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
 
 // ==========================================
+// 0. ENDPOINT WEBHOOK (Paling Luar)
+// ==========================================
+// Mendaftarkan Webhook secara langsung di root API agar urlnya menjadi:
+// https://domainanda.com/webhook
+app.route('/webhook', webhookRouter);
+
+// ==========================================
 // 1. RUTE PUBLIK (Dapat diakses tanpa login)
 // ==========================================
-app.route('/auth', authRouter);
-app.route('/public/restaurants', restaurantRouter);
-app.route('/public/menus', menuRouter);
-app.route('/public/menu-items', menuItemRouter);
-app.route('/public/menu-categories', menuCategoryRouter);
-app.route('/public/coupons', couponRouter);
+// Mengelompokkan semua API utama ke dalam /api/v1
+const api = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+api.route('/auth', authRouter);
+api.route('/public/restaurants', restaurantRouter);
+api.route('/public/menus', menuRouter);
+api.route('/public/menu-items', menuItemRouter);
+api.route('/public/menu-categories', menuCategoryRouter);
+api.route('/public/coupons', couponRouter);
 
 // ==========================================
 // 2. MIDDLEWARE JWT GLOBAL (Area Terproteksi)
 // ==========================================
-// Semua request yang mengarah ke path /protected/* wajib memiliki Token JWT yang valid
-app.use('/protected/*', async (c, next) => {
+api.use('/protected/*', async (c, next) => {
   const middleware = jwt({ secret: c.env.JWT_SECRET, alg: 'HS256' });
   return middleware(c, next);
 });
@@ -51,15 +59,13 @@ app.use('/protected/*', async (c, next) => {
 // ==========================================
 // 3. RUTE KHUSUS USER (Aplikasi Mobile)
 // ==========================================
-// Rute ini hanya membutuhkan token JWT valid (Role USER maupun ADMIN bisa akses)
-app.route('/protected/user/orders', orderRouter);
-app.route('/protected/user/profile', userRouter);
+api.route('/protected/user/orders', orderRouter);
+api.route('/protected/user/profile', userRouter);
 
 // ==========================================
 // 4. ROLE GUARD (Khusus Area Admin)
 // ==========================================
-// Middleware ini memblokir siapapun yang rolenya bukan ADMIN
-app.use('/protected/admin/*', async (c, next) => {
+api.use('/protected/admin/*', async (c, next) => {
   const payload = c.get('jwtPayload');
   if (payload.role !== 'ADMIN') {
     return c.json({ success: false, message: 'Akses ditolak. Anda bukan Admin!' }, 403);
@@ -70,14 +76,17 @@ app.use('/protected/admin/*', async (c, next) => {
 // ==========================================
 // 5. RUTE KHUSUS ADMIN (Web Dashboard)
 // ==========================================
-app.route('/protected/admin/restaurants', restaurantRouter);
-app.route('/protected/admin/users', userRouter);
-app.route('/protected/admin/menu-categories', menuCategoryRouter);
-app.route('/protected/admin/menu-items', menuItemRouter);
-app.route('/protected/admin/orders', orderRouter);
-app.route('/protected/admin/uploads', uploadRouter);
-app.route('/protected/admin/promos', promoRouter);
-app.route('/protected/admin/coupons', couponRouter);
-app.route('/protected/admin/gobiz', gobizRouter);
+api.route('/protected/admin/restaurants', restaurantRouter);
+api.route('/protected/admin/users', userRouter);
+api.route('/protected/admin/menu-categories', menuCategoryRouter);
+api.route('/protected/admin/menu-items', menuItemRouter);
+api.route('/protected/admin/orders', orderRouter);
+api.route('/protected/admin/uploads', uploadRouter);
+api.route('/protected/admin/promos', promoRouter);
+api.route('/protected/admin/coupons', couponRouter);
+api.route('/protected/admin/gobiz', gobizRouter);
+
+// Pasang sub-router api ke root aplikasi
+app.route('/api/v1', api);
 
 export default app;
