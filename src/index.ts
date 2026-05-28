@@ -13,6 +13,7 @@ import { menuItemRouter } from './routes/menuItems';
 import { orderRouter } from './routes/orders';
 import { uploadRouter } from './routes/uploads';
 import { menuCategoryRouter } from './routes/menuCategories';
+import { promoRouter } from './routes/promos';
 
 // Inisialisasi Aplikasi Hono dengan Base Path
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>().basePath('/api/v1');
@@ -50,10 +51,6 @@ app.use('/protected/*', async (c, next) => {
 app.route('/protected/user/orders', orderRouter);
 app.route('/protected/user/profile', userRouter);
 
-// (Opsional) Jika nanti file likes.ts dan reviews.ts sudah Anda buat:
-// app.route('/protected/user/likes', likeRouter);
-// app.route('/protected/user/reviews', reviewRouter);
-
 // ==========================================
 // 4. ROLE GUARD (Khusus Area Admin)
 // ==========================================
@@ -75,5 +72,6 @@ app.route('/protected/admin/menu-categories', menuCategoryRouter);
 app.route('/protected/admin/menu-items', menuItemRouter);
 app.route('/protected/admin/orders', orderRouter);
 app.route('/protected/admin/uploads', uploadRouter);
+app.route('/protected/admin/promos', promoRouter);
 
 export default app;
