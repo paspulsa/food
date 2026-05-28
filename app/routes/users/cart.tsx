@@ -111,7 +111,7 @@ export default createRoute(async (c) => {
              <p id="coupon-message" class="text-[11px] font-bold mt-2 hidden"></p>
           </div>
 
-          {/* RINGKASAN PEMBAYARAN - PENGEMASAN DIHILANGKAN */}
+          {/* RINGKASAN PEMBAYARAN */}
           <div class="px-4 mt-6">
             <h3 class="text-sm font-black text-gray-900 dark:text-white mb-3">Ringkasan Pembayaran</h3>
             <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-3 text-xs font-medium text-gray-600 dark:text-gray-400">
@@ -178,7 +178,6 @@ export default createRoute(async (c) => {
 
       </div>
 
-      {/* SCRIPT LOGIKA KUPON, GPS ONGKIR, POINT KERANJANG, & CHECKOUT 401 */}
       <script dangerouslySetInnerHTML={{ __html: `
         const DB_ADDRESS = \`${userAddress}\`;
         const DB_POINTS = ${userPoints};
@@ -378,7 +377,10 @@ export default createRoute(async (c) => {
           let totalItems = 0;
 
           cart.forEach((item, index) => {
-            const itemTotal = item.price * item.qty;
+            // PERBAIKAN: Hitung harga dasar ditambah harga opsi custom
+            const unitPrice = item.price + (item.additional_price || 0);
+            const itemTotal = unitPrice * item.qty;
+            
             calculatedSubtotal += itemTotal;
             totalItems += item.qty;
 
@@ -388,7 +390,7 @@ export default createRoute(async (c) => {
                 <div class="flex flex-col justify-between flex-1">
                   <div>
                     <h4 class="text-sm font-bold text-gray-900 dark:text-white leading-tight line-clamp-2">\${item.name}</h4>
-                    \${item.note ? \`<p class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">Kustom: \${item.note}</p>\` : ''}
+                    \${item.note ? \`<p class="text-[10px] text-gray-500 dark:text-gray-400 mt-1 leading-snug">Pilihan: \${item.note}</p>\` : ''}
                   </div>
                   <div class="flex justify-between items-end mt-2">
                     <span class="text-sm font-black text-[#ee4d2d]">\${formatter.format(itemTotal)}</span>
@@ -465,7 +467,6 @@ export default createRoute(async (c) => {
            btn.innerHTML = '<span class="text-sm">Memproses...</span>';
            btn.disabled = true;
 
-           // Helper untuk membaca token JWT dari cookie
            const getCookie = (name) => {
              const value = "; " + document.cookie;
              const parts = value.split("; " + name + "=");
@@ -473,7 +474,6 @@ export default createRoute(async (c) => {
            };
            const token = getCookie('token');
 
-           // BLOKIR JIKA TIDAK ADA TOKEN SEBELUM FETCH API
            if (!token) {
                window.location.href = '/users/login';
                return;
@@ -502,7 +502,6 @@ export default createRoute(async (c) => {
                body: JSON.stringify(payload)
              });
              
-             // BLOKIR JIKA SERVER MERESPON 401 UNAUTHORIZED (TOKEN EXPIRED/INVALID)
              if (res.status === 401) {
                  window.location.href = '/users/login';
                  return;
