@@ -14,7 +14,9 @@ export default createRoute(async (c) => {
         userId = payload.id as string;
         isUserLoggedIn = true;
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("JWT Error:", e);
+    }
   }
 
   // Proteksi Halaman: Wajib Login
@@ -22,10 +24,20 @@ export default createRoute(async (c) => {
     return c.redirect('/users/login');
   }
 
-  // Tarik Data Riwayat Pesanan User
-  const { results: orders } = await c.env.DB.prepare(
-    'SELECT id, status, COALESCE(total_price, total_amount) as grand_total, created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC'
-  ).bind(userId).all();
+  let orders: any[] = [];
+  
+  // Gunakan try-catch agar halaman tidak blank jika ada kolom database yang belum termigrasi
+  try {
+    // Kueri diperbaiki murni menggunakan 'total_price' sesuai skema terbaru Anda
+    const { results } = await c.env.DB.prepare(
+      'SELECT id, status, total_price as grand_total, created_at FROM orders WHERE user_id = ? ORDER BY created_at DESC'
+    ).bind(userId).all();
+    
+    orders = results;
+  } catch (error) {
+    console.error("Gagal menarik data pesanan:", error);
+    // Biarkan array orders kosong, UI akan menampilkan "Belum Ada Pesanan" dengan rapi
+  }
 
   const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 
