@@ -2,14 +2,22 @@ import { createRoute } from 'honox/factory'
 
 export default createRoute(async (c) => {
   const db = c.env.DB;
+  
+  const allowedRoles = ['ADMIN', 'CASHIER', 'KITCHEN', 'WAITER', 'USER'];
 
   // ==========================================
-  // 1. HANDLER POST: UBAH ROLE ADMIN/USER
+  // 1. HANDLER POST: UBAH ROLE PENGGUNA
   // ==========================================
   if (c.req.method === 'POST') {
     try {
       const body = await c.req.json();
       if (body.action === 'change_role') {
+        
+        // Validasi Role
+        if (!allowedRoles.includes(body.new_role)) {
+            return c.json({ success: false, message: 'Role tidak valid.' }, 400);
+        }
+
         await db.prepare('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
           .bind(body.new_role, body.user_id)
           .run();
@@ -33,7 +41,7 @@ export default createRoute(async (c) => {
     return acc;
   }, {});
 
-  // Ambil data riwayat transaksi (orders) -> DIPERBAIKI: Menggunakan total_price sesuai skema tabel
+  // Ambil data riwayat transaksi (orders)
   const { results: orders } = await db.prepare(
     'SELECT id, user_id, status, total_price, points_used, coupon_discount, created_at FROM orders ORDER BY created_at DESC'
   ).all();
@@ -49,12 +57,22 @@ export default createRoute(async (c) => {
     ...u,
     points: pointsMap[u.id] || 0,
     orders: ordersMap[u.id] || [],
-    // DIPERBAIKI: Menggunakan o.total_price dari kueri di atas
     total_spent: (ordersMap[u.id] || []).filter((o:any) => o.status === 'COMPLETED' || o.status === 'PROCESSING' || o.status === 'PAID').reduce((sum:number, o:any) => sum + o.total_price, 0)
   }));
 
   const safeUsersJson = JSON.stringify(usersData).replace(/</g, '\\u003c');
   const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
+
+  // Fungsi Helper untuk Warna Badge Role
+  const getRoleBadgeClass = (role: string) => {
+    switch(role) {
+      case 'ADMIN': return 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-500/30';
+      case 'CASHIER': return 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-500/30';
+      case 'KITCHEN': return 'bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-500/30';
+      case 'WAITER': return 'bg-green-50 text-green-600 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-500/30';
+      default: return 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600';
+    }
+  };
 
   return c.render(
     <div class="space-y-6 pb-10">
@@ -66,11 +84,11 @@ export default createRoute(async (c) => {
         <div>
           <h2 class="text-2xl font-bold text-gray-800 dark:text-white flex items-center gap-2">
             <svg class="w-7 h-7 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
-            Manajemen Pelanggan (CRM)
+            Manajemen Pelanggan & Role
           </h2>
-          <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">Kelola data pelanggan, hak akses admin, poin *cashback*, dan pantau riwayat transaksi.</p>
+          <p class="text-gray-500 dark:text-gray-400 text-sm mt-1">Kelola data pelanggan, atur hak akses sistem, pantau saldo poin, dan riwayat transaksi.</p>
         </div>
-        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-2 rounded-xl border border-gray-100 dark:border-gray-700">
+        <div class="bg-gray-50 dark:bg-gray-800 px-4 py-2 rounded-xl border border-gray-100 dark:border-gray-700 flex gap-4">
           <span class="text-sm font-bold text-gray-600 dark:text-gray-300">Total: <span class="text-primary">{users.length} User</span></span>
         </div>
       </div>
@@ -83,7 +101,7 @@ export default createRoute(async (c) => {
               <tr class="bg-gray-50/70 dark:bg-darkbg/50 text-gray-400 dark:text-gray-500 text-xs uppercase tracking-wider border-b border-gray-100 dark:border-darkborder">
                 <th class="px-6 py-4 font-semibold">Profil Pengguna</th>
                 <th class="px-6 py-4 font-semibold">Kontak</th>
-                <th class="px-6 py-4 font-semibold">Role</th>
+                <th class="px-6 py-4 font-semibold">Akses / Role</th>
                 <th class="px-6 py-4 font-semibold">Total Order</th>
                 <th class="px-6 py-4 text-right font-semibold">Aksi</th>
               </tr>
@@ -92,7 +110,7 @@ export default createRoute(async (c) => {
               {usersData.length === 0 ? (
                 <tr>
                   <td colspan="5" class="px-6 py-12 text-center text-gray-400 italic bg-white dark:bg-darkpanel">
-                    Belum ada data pelanggan yang mendaftar.
+                    Belum ada data pengguna yang mendaftar.
                   </td>
                 </tr>
               ) : usersData.map((u: any) => (
@@ -110,7 +128,7 @@ export default createRoute(async (c) => {
                     {u.phone || <span class="text-gray-400 italic">Belum diisi</span>}
                   </td>
                   <td class="px-6 py-4">
-                    <span class={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${u.role === 'ADMIN' ? 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-500/30' : 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600'}`}>
+                    <span class={`inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getRoleBadgeClass(u.role)}`}>
                       {u.role}
                     </span>
                   </td>
@@ -119,10 +137,10 @@ export default createRoute(async (c) => {
                   </td>
                   <td class="px-6 py-4 text-right space-x-2">
                     <button onclick={`showUserDetail('${u.id}')`} class="text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-lg transition-colors">
-                      Detail & Riwayat
+                      Detail
                     </button>
-                    <button onclick={`toggleRole('${u.id}', '${u.role}', '${u.name.replace(/'/g, "\\'")}')`} class="text-xs font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 px-3 py-1.5 rounded-lg transition-colors">
-                      {u.role === 'ADMIN' ? 'Cabut Admin' : 'Jadikan Admin'}
+                    <button onclick={`changeRole('${u.id}', '${u.role}', '${u.name.replace(/'/g, "\\'")}')`} class="text-xs font-bold text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 px-3 py-1.5 rounded-lg transition-colors">
+                      Ubah Role
                     </button>
                   </td>
                 </tr>
@@ -225,6 +243,17 @@ export default createRoute(async (c) => {
         const USERS_DATA = ${safeUsersJson};
         const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 
+        // Helper untuk warna badge role di Modal
+        function getBadgeClassJS(role) {
+          switch(role) {
+            case 'ADMIN': return 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-500/30';
+            case 'CASHIER': return 'bg-blue-50 text-blue-600 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-500/30';
+            case 'KITCHEN': return 'bg-orange-50 text-orange-600 border-orange-200 dark:bg-orange-900/30 dark:text-orange-400 dark:border-orange-500/30';
+            case 'WAITER': return 'bg-green-50 text-green-600 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-500/30';
+            default: return 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600';
+          }
+        }
+
         // Fungsi Render Modal Detail
         function showUserDetail(userId) {
           const user = USERS_DATA.find(u => u.id === userId);
@@ -243,9 +272,9 @@ export default createRoute(async (c) => {
 
           const roleBadge = document.getElementById('m-role');
           roleBadge.innerText = user.role;
-          roleBadge.className = \`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold mt-1 border \${user.role === 'ADMIN' ? 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-700 dark:text-gray-300'}\`;
+          roleBadge.className = \`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold mt-1 border \${getBadgeClassJS(user.role)}\`;
 
-          // Render Tabel Riwayat Kanan (DIPERBAIKI: Menggunakan o.total_price dari database orders)
+          // Render Tabel Riwayat Kanan
           const tbody = document.getElementById('m-history');
           if (user.orders.length === 0) {
              tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-10 text-center text-gray-400 italic">Belum pernah melakukan transaksi.</td></tr>';
@@ -296,40 +325,53 @@ export default createRoute(async (c) => {
           }, 300);
         }
 
-        // Fungsi Ubah Role User <-> Admin
-        async function toggleRole(userId, currentRole, userName) {
-          const newRole = currentRole === 'ADMIN' ? 'USER' : 'ADMIN';
+        // Fungsi Ubah Role User (Select Dropdown via SweetAlert)
+        async function changeRole(userId, currentRole, userName) {
+          const allowedRoles = ['ADMIN', 'CASHIER', 'KITCHEN', 'WAITER', 'USER'];
           
-          Swal.fire({
-            title: 'Konfirmasi Perubahan Akses',
-            html: \`Anda akan mengubah hak akses <b>\${userName}</b> menjadi <b class="\${newRole === 'ADMIN' ? 'text-purple-500' : 'text-gray-500'}">\${newRole}</b>.<br><br>Yakin ingin melanjutkan?\`,
-            icon: 'warning',
+          let inputOptions = {};
+          allowedRoles.forEach(r => inputOptions[r] = r);
+
+          const { value: newRole } = await Swal.fire({
+            title: 'Ubah Akses Role',
+            html: \`Pilih hak akses sistem baru untuk <b>\${userName}</b>:\`,
+            icon: 'question',
+            input: 'select',
+            inputOptions: inputOptions,
+            inputValue: currentRole,
             showCancelButton: true,
             confirmButtonColor: '#ee4d2d',
             cancelButtonColor: '#9ca3af',
-            confirmButtonText: 'Ya, Ubah Role!',
+            confirmButtonText: 'Simpan Akses',
             cancelButtonText: 'Batal'
-          }).then(async (result) => {
-            if (result.isConfirmed) {
-              try {
-                // Post ke route saat ini (self)
-                const res = await fetch('/admin/users', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ action: 'change_role', user_id: userId, new_role: newRole })
-                });
-                
-                const data = await res.json();
-                if (data.success) {
-                  Swal.fire('Berhasil!', data.message, 'success').then(() => window.location.reload());
-                } else {
-                  Swal.fire('Gagal', data.message, 'error');
-                }
-              } catch (e) {
-                Swal.fire('Error', 'Terjadi kesalahan jaringan.', 'error');
-              }
-            }
           });
+
+          if (newRole && newRole !== currentRole) {
+            Swal.fire({
+                title: 'Menyimpan...',
+                text: 'Mohon tunggu sebentar',
+                allowOutsideClick: false,
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            try {
+              // Post ke route saat ini (self)
+              const res = await fetch('/admin/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'change_role', user_id: userId, new_role: newRole })
+              });
+              
+              const data = await res.json();
+              if (data.success) {
+                Swal.fire('Berhasil!', data.message, 'success').then(() => window.location.reload());
+              } else {
+                Swal.fire('Gagal', data.message, 'error');
+              }
+            } catch (e) {
+              Swal.fire('Error', 'Terjadi kesalahan jaringan.', 'error');
+            }
+          }
         }
       `}} />
     </div>
