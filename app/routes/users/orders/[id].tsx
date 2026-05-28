@@ -28,7 +28,7 @@ export default createRoute(async (c) => {
 
   if (!order) return c.notFound();
 
-  // Tarik Data Item Pesanan (Join dengan menu_items untuk nama produk)
+  // Tarik Data Item Pesanan
   const { results: orderItems } = await c.env.DB.prepare(`
     SELECT od.quantity, od.price, m.name 
     FROM order_details od 
@@ -42,7 +42,7 @@ export default createRoute(async (c) => {
   ).bind(orderId).first();
 
   const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
-  const grandTotal = order.total_price || order.total_amount || 0; // Kompatibilitas schema
+  const grandTotal = order.total_price || order.total_amount || 0; 
   const orderDate = new Date(order.created_at).toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' });
 
   return c.render(
@@ -65,7 +65,7 @@ export default createRoute(async (c) => {
             /* Tampilkan area khusus struk */
             .print\\:block { display: block !important; }
             
-            /* Ukuran 58mm = sekitar 48mm area cetak efektif (~180px - 200px width) */
+            /* Ukuran 58mm */
             .thermal-receipt {
               width: 58mm; 
               padding: 2mm;
@@ -94,7 +94,6 @@ export default createRoute(async (c) => {
             <h1 class="text-lg font-black text-gray-900 dark:text-white">Detail Pesanan</h1>
           </div>
           
-          {/* TOMBOL CETAK STRUK */}
           <button onclick="window.print()" class="text-xs font-bold bg-[#ee4d2d]/10 text-[#ee4d2d] px-3 py-1.5 rounded-lg flex items-center gap-1.5 hover:bg-[#ee4d2d]/20 transition-colors">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
             Struk
@@ -103,7 +102,6 @@ export default createRoute(async (c) => {
 
         <div class="p-4 space-y-4">
           
-          {/* Card Status */}
           <div class="bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 text-center relative overflow-hidden">
             <div class="absolute top-0 left-0 w-full h-1 bg-[#ee4d2d]"></div>
             <p class="text-xs text-gray-500 dark:text-gray-400 font-bold mb-1">Status Pesanan</p>
@@ -114,12 +112,11 @@ export default createRoute(async (c) => {
             <p class="text-xs text-gray-400 mt-3">{orderDate}</p>
           </div>
 
-          {/* Card Item Pesanan */}
           <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
             <h3 class="text-sm font-black text-gray-900 dark:text-white mb-3 border-b border-gray-100 dark:border-gray-700 pb-2">Daftar Menu</h3>
             <div class="space-y-3">
               {orderItems.length === 0 ? (
-                <p class="text-xs text-gray-400 italic">Rincian menu sedang sinkronisasi.</p>
+                <p class="text-xs text-gray-400 italic">Rincian menu sedang disinkronisasi...</p>
               ) : orderItems.map((item: any) => (
                 <div class="flex justify-between items-start text-sm">
                   <div class="flex gap-2">
@@ -135,7 +132,6 @@ export default createRoute(async (c) => {
             </div>
           </div>
 
-          {/* Card Ringkasan & Pembayaran */}
           <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
             <h3 class="text-sm font-black text-gray-900 dark:text-white mb-3 border-b border-gray-100 dark:border-gray-700 pb-2">Ringkasan Biaya</h3>
             <div class="space-y-2 text-xs font-medium text-gray-600 dark:text-gray-400">
@@ -159,17 +155,23 @@ export default createRoute(async (c) => {
             </div>
           </div>
 
-          {/* Jika Belum Dibayar, Tampilkan QRIS / Instruksi */}
-          {transaction && transaction.status === 'UNPAID' && (
+          {transaction && transaction.status === 'UNPAID' && transaction.raw_qris && (
             <div class="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 p-4 rounded-2xl text-center shadow-sm">
               <h3 class="text-sm font-black text-[#ee4d2d] mb-2">Selesaikan Pembayaran</h3>
-              <p class="text-xs text-orange-800 dark:text-orange-200 mb-4">Silakan bayar sejumlah <strong class="font-black">{formatter.format(transaction.final_amount)}</strong> ke kasir atau via QRIS.</p>
-              {/* Jika ingin generate QR Code, bisa pakai library frontend QR Code di sini */}
-              <div class="inline-block p-3 bg-white rounded-xl shadow-sm">
-                <div class="w-32 h-32 bg-gray-200 flex items-center justify-center text-[10px] text-gray-500 font-bold border-2 border-dashed border-gray-300">
-                  QRIS MOCKUP
-                </div>
+              <p class="text-xs text-orange-800 dark:text-orange-200 mb-4">Silakan bayar sejumlah <strong class="font-black">{formatter.format(transaction.final_amount)}</strong> dengan menscan QRIS di bawah ini.</p>
+              
+              <div class="inline-block p-4 bg-white rounded-2xl shadow-sm border border-orange-100 dark:border-gray-700">
+                <img 
+                  src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(transaction.raw_qris)}`} 
+                  alt="QR Code Pembayaran QRIS" 
+                  class="w-48 h-48 object-contain mx-auto mix-blend-multiply"
+                />
               </div>
+
+              <p class="text-[10px] text-gray-500 dark:text-gray-400 mt-4 leading-relaxed max-w-[80%] mx-auto">
+                <span class="font-bold block text-gray-700 dark:text-gray-300">Cara Bayar di HP yang sama:</span>
+                Screenshot gambar QRIS di atas, buka aplikasi M-Banking/E-Wallet Anda, pilih menu Scan QR, lalu buka gambar dari Galeri.
+              </p>
             </div>
           )}
 
@@ -191,7 +193,7 @@ export default createRoute(async (c) => {
           <tr><td style="width: 35%;">No. Ord</td><td style="width: 5%;">:</td><td>{order.id}</td></tr>
           <tr><td>Tanggal</td><td>:</td><td>{new Date(order.created_at).toLocaleString('id-ID')}</td></tr>
           <tr><td>Status</td><td>:</td><td>{order.status}</td></tr>
-          <tr><td>Cust</td><td>:</td><td>{order.delivery_address || 'Walk-in'}</td></tr>
+          <tr><td style="vertical-align: top;">Cust</td><td style="vertical-align: top;">:</td><td>{order.address || 'Walk-in'}</td></tr>
         </table>
         <div class="thermal-border"></div>
 
@@ -231,5 +233,5 @@ export default createRoute(async (c) => {
       </div>
 
     </div>
-  , { title: 'Detail Pesanan - ShopeeFood Clone' })
+  , { title: 'Detail Pesanan - Kedai Pangsit Kembar 88' })
 })
