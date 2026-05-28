@@ -397,6 +397,15 @@ export default createRoute(async (c) => {
            btn.innerHTML = '<span class="text-sm">Memproses...</span>';
            btn.disabled = true;
 
+           // 1. Ambil token dari Cookie agar bisa dikirim ke header Authorization
+           // Fungsi helper untuk baca cookie
+           const getCookie = (name) => {
+             const value = "; " + document.cookie;
+             const parts = value.split("; " + name + "=");
+             if (parts.length === 2) return parts.pop().split(";").shift();
+           };
+           const token = getCookie('token');
+
            const address = document.getElementById('cart-address-display').innerText;
            const notes = document.getElementById('order-notes').value;
            
@@ -413,27 +422,23 @@ export default createRoute(async (c) => {
            };
 
            try {
-             // Pastikan user sudah login (token akan otomatis terkirim via cookie)
              const res = await fetch('/api/v1/protected/user/orders/checkout', {
                method: 'POST',
-               headers: { 'Content-Type': 'application/json' },
+               headers: { 
+                 'Content-Type': 'application/json',
+                 'Authorization': 'Bearer ' + token // <--- INI YANG DITAMBAHKAN
+               },
                body: JSON.stringify(payload)
              });
              
              const data = await res.json();
              
              if (data.success) {
-               // Hapus isi keranjang di localStorage karena sudah masuk pesanan
                localStorage.removeItem('spos_cart');
-               showToast('Pesanan berhasil dibuat! Mengalihkan ke pembayaran...');
-               
-               // Alihkan ke halaman pelacakan pesanan/pembayaran QRIS
-               setTimeout(() => {
-                 window.location.href = '/users/orders/' + data.data.order_id;
-               }, 1500);
+               showToast('Pesanan berhasil dibuat!');
+               setTimeout(() => { window.location.href = '/users/orders/' + data.data.order_id; }, 1500);
              } else {
                showToast(data.message || 'Gagal membuat pesanan.', true);
-               // Jika unauthorized, arahkan ke login
                if (res.status === 401) setTimeout(() => window.location.href = '/users/login', 1500);
              }
            } catch (error) {
@@ -443,7 +448,7 @@ export default createRoute(async (c) => {
              btn.disabled = false;
            }
         }
-
+        
         document.addEventListener('DOMContentLoaded', () => {
           initAddress();
           renderCart();
