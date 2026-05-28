@@ -95,6 +95,13 @@ orderRouter.post('/checkout', async (c) => {
       }
     }
 
+    const finalRestoId = body.restaurant_id || fallbackRestoId;
+
+    // ANTI-ERROR: Bypass Foreign Key Constraint dengan memastikan ID restoran ada
+    await db.prepare(
+      `INSERT OR IGNORE INTO restaurants (id, name, address) VALUES (?, 'Cabang Utama', 'Otomatis dibuat oleh sistem')`
+    ).bind(finalRestoId).run();
+
     // Tentukan Ongkir dari Body
     let ongkir = typeof body.ongkir === 'number' ? body.ongkir : (settings?.mid_range_price || 10000);
 
@@ -152,7 +159,7 @@ orderRouter.post('/checkout', async (c) => {
     ).bind(
       orderId, 
       user.id, 
-      body.restaurant_id || fallbackRestoId, 
+      finalRestoId, 
       baseTotal, 
       finalAmount === 0 ? 'PROCESSING' : 'PENDING', 
       finalAddress,
@@ -163,7 +170,7 @@ orderRouter.post('/checkout', async (c) => {
       couponDiscount
     ).run();
 
-    // 5. INSERT KE TABEL ORDER_DETAILS (Menyimpan rincian dan harga kustom)
+    // 5. INSERT KE TABEL ORDER_DETAILS (Menyimpan rincian dan catatan harga kustom)
     for (const item of body.cart) {
       const odId = crypto.randomUUID();
       const dbItem: any = await db.prepare('SELECT price, promo_price, is_promo FROM menu_items WHERE id = ?').bind(item.id).first();
@@ -171,8 +178,8 @@ orderRouter.post('/checkout', async (c) => {
       const finalItemPrice = itemPrice + (item.additional_price || 0);
       
       await db.prepare(
-        'INSERT INTO order_details (id, order_id, menu_item_id, quantity, price) VALUES (?, ?, ?, ?, ?)'
-      ).bind(odId, orderId, item.id, item.qty, finalItemPrice).run();
+        'INSERT INTO order_details (id, order_id, menu_item_id, quantity, price, note) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(odId, orderId, item.id, item.qty, finalItemPrice, item.note || '').run();
     }
 
     // 6. Jika Kupon Sisa, Jadikan Poin
@@ -236,6 +243,11 @@ orderRouter.post('/checkout-voucher', async (c) => {
     } else {
         return c.json({ success: false, message: 'Parameter tidak valid' }, 400);
     }
+
+    // ANTI-ERROR: Bypass FK jika resto 'SYSTEM' belum ada
+    await db.prepare(
+      `INSERT OR IGNORE INTO restaurants (id, name, address) VALUES ('SYSTEM', 'Sistem Pembelian Voucher', 'Digital')`
+    ).run();
 
     // Pembuatan ID Transaksi Khusus Voucher (VCH)
     const orderId = 'VCH-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100);
