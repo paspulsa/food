@@ -117,16 +117,25 @@ export default createRoute(async (c) => {
         <div class="w-full">
           
           {/* =========================================================
-              BANNER PROMO SLIDER DINAMIS
+              BANNER PROMO SLIDER DINAMIS (KINI MENJADI HERO SLIDER)
               ========================================================= */}
           {appPromos.length > 0 && (
-            <div class="px-4 mt-4">
-              <div class="flex overflow-x-auto snap-x snap-mandatory gap-3 hide-scrollbar pb-2">
-                {appPromos.map((promo: any) => (
-                  <a href={promo.action_url || '#'} class="snap-center shrink-0 w-[85%] sm:w-[280px] block transform hover:scale-[1.02] transition-transform">
-                    <img src={promo.image} class="w-full h-32 object-cover rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 bg-gray-200 dark:bg-gray-700" alt="Promo App" />
+            <div class="px-4 mt-5">
+              <div class="relative w-full h-40 rounded-2xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-700 bg-gray-200 dark:bg-gray-700 group">
+                {appPromos.map((promo: any, index: number) => (
+                  <a href={promo.action_url || '#'} class={`absolute inset-0 w-full h-full transition-opacity duration-700 ease-in-out ${index === 0 ? 'opacity-100 z-10' : 'opacity-0 z-0'}`} data-slide={index}>
+                    <img src={promo.image} class="w-full h-full object-cover" alt="Promo Banner" />
                   </a>
                 ))}
+                
+                {/* Slider Dots */}
+                {appPromos.length > 1 && (
+                  <div class="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5 z-20">
+                    {appPromos.map((_: any, index: number) => (
+                      <span class={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${index === 0 ? 'bg-white scale-125' : 'bg-white/50'}`} data-dot={index}></span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -168,17 +177,17 @@ export default createRoute(async (c) => {
           </div>
 
           {/* =========================================================
-              PALING LAKU DI SEKITARMU (BEST SELLERS)
+              PALING LAKU DI SEKITARMU (BEST SELLERS) - DIPERBAIKI (TIDAK FULL WIDTH LAGI)
               ========================================================= */}
           {bestSellers.length > 0 && (
-            <div class="mt-4 pb-2">
-              <div class="px-4 flex justify-between items-center mb-3">
+            <div class="px-4 mt-4 pb-2 w-full">
+              <div class="flex justify-between items-center mb-3">
                 <h3 class="text-base font-black text-gray-900 dark:text-white flex items-center gap-1.5">
                   <span class="text-xl">🔥</span> Paling Laku di Sekitarmu
                 </h3>
               </div>
               
-              <div class="flex overflow-x-auto snap-x snap-mandatory gap-2.5 px-4 hide-scrollbar pb-4 pt-1">
+              <div class="flex overflow-x-auto snap-x snap-mandatory gap-3 hide-scrollbar pb-4 pt-1">
                 {bestSellers.map((item: any, index: number) => {
                   const isOutOfStock = item.stock === 0;
                   const currentPrice = item.is_promo ? item.promo_price : item.price;
@@ -229,11 +238,11 @@ export default createRoute(async (c) => {
           <div class="h-2 bg-gray-100 dark:bg-gray-900 w-full"></div>
 
           {/* =========================================================
-              FLASH SALE / PROMO GERCEP (CARD LEBIH BESAR)
+              FLASH SALE / PROMO GERCEP (CARD LEBIH BESAR) - DIPERBAIKI (TIDAK FULL WIDTH LAGI)
               ========================================================= */}
           {promoItems.length > 0 && (
-            <div class="mt-4">
-              <div class="px-4 flex justify-between items-center mb-3">
+            <div class="px-4 mt-4 w-full">
+              <div class="flex justify-between items-center mb-3">
                 <h3 class="text-base font-black text-gray-900 dark:text-white italic flex items-center gap-1">
                   <svg class="w-5 h-5 text-[#ee4d2d]" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd"></path></svg>
                   PROMO GERCEP
@@ -241,7 +250,7 @@ export default createRoute(async (c) => {
                 <a href="/users/promos" class="text-[11px] font-bold text-[#ee4d2d] hover:underline bg-orange-50 dark:bg-[#ee4d2d]/10 px-2 py-1 rounded transition-colors">Lihat semua</a>
               </div>
 
-              <div class="flex overflow-x-auto snap-x snap-mandatory gap-3 px-4 hide-scrollbar pb-4 pt-1">
+              <div class="flex overflow-x-auto snap-x snap-mandatory gap-3 hide-scrollbar pb-4 pt-1">
                 {promoItems.map((item: any) => {
                   const discountPercent = Math.round(((item.price - item.promo_price) / item.price) * 100);
                   const isOutOfStock = item.stock === 0;
@@ -444,7 +453,7 @@ export default createRoute(async (c) => {
               <span class="text-[10px] font-semibold">Keranjang</span>
             </a>
             <a href="/users/orders" class="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 hover:text-[#ee4d2d] transition-colors">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
               <span class="text-[10px] font-semibold">Order</span>
             </a>
             <a href="/users/login" class="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 hover:text-[#ee4d2d] transition-colors">
@@ -472,6 +481,28 @@ export default createRoute(async (c) => {
         let currentQty = 1;
         let basePrice = 0;
         let additionalPrice = 0;
+
+        // --- INIT HERO SLIDER ---
+        function initSlider() {
+          let currentSlide = 0;
+          const slides = document.querySelectorAll('[data-slide]');
+          const dots = document.querySelectorAll('[data-dot]');
+          if(slides.length > 1) {
+            setInterval(() => {
+              slides[currentSlide].classList.remove('opacity-100', 'z-10');
+              slides[currentSlide].classList.add('opacity-0', 'z-0');
+              dots[currentSlide].classList.remove('bg-white', 'scale-125');
+              dots[currentSlide].classList.add('bg-white/50');
+              
+              currentSlide = (currentSlide + 1) % slides.length;
+              
+              slides[currentSlide].classList.remove('opacity-0', 'z-0');
+              slides[currentSlide].classList.add('opacity-100', 'z-10');
+              dots[currentSlide].classList.remove('bg-white/50');
+              dots[currentSlide].classList.add('bg-white', 'scale-125');
+            }, 3500);
+          }
+        }
         
         // --- 1. TOAST NOTIFIKASI ELEGAN ---
         function showToast(msg, isError = false) {
@@ -883,6 +914,7 @@ export default createRoute(async (c) => {
           initLocation();
           initPromoModal();
           updateCartBadge();
+          initSlider(); // Memulai Hero Slider
         });
       `}} />
     </div>
