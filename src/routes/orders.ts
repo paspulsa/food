@@ -251,3 +251,62 @@ orderRouter.post('/webhook', async (c) => {
     return c.json({ success: false, message: 'Kesalahan Sistem Webhook Server' }, 500);
   }
 });
+
+// ==========================================
+// ENDPOINT CHECKOUT VOUCHER (NON-FOOD)
+// ==========================================
+orderRouter.post('/checkout-voucher', async (c) => {
+  const db = c.env.DB;
+  const user = c.get('jwtPayload'); 
+  const body = await c.req.json();
+  
+  if (!user || !user.id) return c.json({ success: false, message: 'Harap login.' }, 401);
+
+  try {
+    const config: any = await db.prepare('SELECT * FROM config WHERE id = 1').first();
+    let finalAmount = 0;
+    let voucherValue = 0;
+    let bulkQty = 1;
+    let title = "Custom Voucher";
+
+    // Jika beli paket fix dari admin
+    if (body.package_id) {
+        const pkg: any = await db.prepare('SELECT * FROM voucher_packages WHERE id = ? AND is_active = 1').bind(body.package_id).first();
+        if (!pkg) return c.json({ success: false, message: 'Paket voucher tidak valid' }, 400);
+        finalAmount = pkg.sell_price;
+        voucherValue = pkg.voucher_value;
+        bulkQty = pkg.bulk_qty;
+        title = pkg.title;
+    } 
+    // Jika custom nominal
+    else if (body.custom_amount) {
+        if (body.custom_amount < 10000) return c.json({ success: false, message: 'Minimal custom voucher Rp 10.000' }, 400);
+        finalAmount = body.custom_amount;
+        voucherValue = body.custom_amount;
+    } else {
+        return c.json({ success: false, message: 'Parameter tidak valid' }, 400);
+    }
+
+    const orderId = 'VCH-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100);
+    
+    // Inject parameter untuk digenerate saat lunas nanti (Disimpan di notes)
+    const notesJson = JSON.stringify({ is_voucher: true, voucher_value: voucherValue, bulk_qty: bulkQty });
+
+    await db.prepare(
+      `INSERT INTO orders (id, user_id, restaurant_id, total_price, status, address, order_type, payment_method, notes) 
+       VALUES (?, ?, 'SYSTEM', ?, 'PENDING', 'DIGITAL VOUCHER', 'VOUCHER', 'QRIS', ?)`
+    ).bind(orderId, user.id, finalAmount, notesJson).run();
+
+    const now = Math.floor(Date.now() / 1000);
+    const rawQris = injectAmount(config.master_raw_qris, finalAmount);
+    
+    await db.prepare(
+      `INSERT INTO transactions (order_id, amount, unique_code, final_amount, raw_qris, status, created_at, expired_at) 
+       VALUES (?, ?, 0, ?, ?, 'UNPAID', ?, ?)`
+    ).bind(orderId, finalAmount, finalAmount, rawQris, now, now + 1800).run();
+
+    return c.json({ success: true, data: { order_id: orderId, final_amount: finalAmount } });
+  } catch (e: any) {
+    return c.json({ success: false, message: e.message }, 500);
+  }
+});
