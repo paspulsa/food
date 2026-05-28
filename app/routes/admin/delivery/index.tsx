@@ -1,7 +1,34 @@
 import { createRoute } from 'honox/factory'
 
+// ==========================================
+// 1. HANDLER POST (MENERIMA DATA SIMPANAN)
+// ==========================================
+export const POST = createRoute(async (c) => {
+   try {
+     const b = await c.req.json();
+     
+     await c.env.DB.prepare(
+       'UPDATE delivery_settings SET free_range_max=?, mid_range_max=?, mid_range_price=?, max_range_price=?, max_radius_limit=? WHERE id=?'
+     ).bind(
+       parseFloat(b.free) || 0, 
+       parseFloat(b.mid) || 0, 
+       parseInt(b.price_mid) || 0, 
+       parseInt(b.price_max) || 0, 
+       parseFloat(b.limit) || 0, 
+       'default-settings'
+     ).run();
+     
+     return c.json({ success: true, message: 'Pengaturan ongkos kirim berhasil diperbarui!' });
+   } catch (error) {
+     return c.json({ success: false, message: 'Terjadi kesalahan sistem saat menyimpan.' }, 500);
+   }
+});
+
+// ==========================================
+// 2. HANDLER GET (MERENDER UI DASHBOARD)
+// ==========================================
 export default createRoute(async (c) => {
-  // 1. Ambil data pengaturan dari database
+  // Ambil data pengaturan dari database
   let settings = await c.env.DB.prepare('SELECT * FROM delivery_settings WHERE id = ?').bind('default-settings').first<any>();
   
   // Auto-Insert jika tabel delivery_settings masih kosong (Baru diinisialisasi)
@@ -29,27 +56,7 @@ export default createRoute(async (c) => {
     settings = defaultData;
   }
 
-  // 2. Handler untuk menyimpan data (Menangkap POST Request dari Frontend)
-  if (c.req.method === 'POST') {
-     try {
-       const b = await c.req.json();
-       await c.env.DB.prepare(
-         'UPDATE delivery_settings SET free_range_max=?, mid_range_max=?, mid_range_price=?, max_range_price=?, max_radius_limit=? WHERE id=?'
-       ).bind(
-         parseFloat(b.free) || 0, 
-         parseFloat(b.mid) || 0, 
-         parseInt(b.price_mid) || 0, 
-         parseInt(b.price_max) || 0, 
-         parseFloat(b.limit) || 0, 
-         'default-settings'
-       ).run();
-       return c.json({ success: true, message: 'Pengaturan ongkos kirim berhasil diperbarui!' });
-     } catch (error) {
-       return c.json({ success: false, message: 'Terjadi kesalahan sistem saat menyimpan.' }, 500);
-     }
-  }
-
-  // 3. Render Tampilan UI Admin
+  // Render Tampilan UI Admin
   return c.render(
     <div class="space-y-6 max-w-4xl mx-auto pb-10">
       {/* HEADER SECTION */}
@@ -156,7 +163,7 @@ export default createRoute(async (c) => {
         </div>
       </form>
 
-      {/* SCRIPT LOGIKA SIMPAN & TOAST (TIDAK MEMBUTUHKAN API EXTERNAL) */}
+      {/* SCRIPT LOGIKA SIMPAN & TOAST */}
       <script dangerouslySetInnerHTML={{ __html: `
         // Fungsi Toast Dinamis
         function showToast(message, isError = false) {
@@ -178,7 +185,6 @@ export default createRoute(async (c) => {
            btn.innerHTML = '<svg class="animate-spin w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Menyimpan...';
            btn.disabled = true;
 
-           // Kumpulkan data dari form
            const payload = {
              free: document.getElementById('free_range').value,
              mid: document.getElementById('mid_range').value,
@@ -188,8 +194,6 @@ export default createRoute(async (c) => {
            };
 
            try {
-             // Melakukan POST ke URL diri sendiri (/admin/delivery)
-             // Akan ditangkap oleh blok c.req.method === 'POST' di kode HonoX atas
              const response = await fetch('/admin/delivery', { 
                method: 'POST', 
                headers: { 'Content-Type': 'application/json' },
