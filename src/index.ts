@@ -15,6 +15,7 @@ import { uploadRouter } from './routes/uploads';
 import { menuCategoryRouter } from './routes/menuCategories';
 import { promoRouter } from './routes/promos';
 import { couponRouter } from './routes/coupons';
+import { gobizRouter } from './routes/gobiz';
 
 // Inisialisasi Aplikasi Hono dengan Base Path
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>().basePath('/api/v1');
@@ -76,5 +77,6 @@ app.route('/protected/admin/orders', orderRouter);
 app.route('/protected/admin/uploads', uploadRouter);
 app.route('/protected/admin/promos', promoRouter);
 app.route('/protected/admin/coupons', couponRouter);
+app.route('/protected/admin/gobiz', gobizRouter);
 
 export default app;
