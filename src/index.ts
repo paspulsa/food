@@ -16,6 +16,7 @@ import { menuCategoryRouter } from './routes/menuCategories';
 import { promoRouter } from './routes/promos';
 import { couponRouter } from './routes/coupons';
 import { gobizRouter } from './routes/gobiz';
+import { webhookRouter } from './routes/webhook';
 
 // Inisialisasi Aplikasi Hono dengan Base Path
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>().basePath('/api/v1');
