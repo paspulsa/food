@@ -56,7 +56,7 @@ function injectAmount(qrisRaw: string, amount: number) {
 }
 
 // ==========================================
-// ENDPOINT CHECKOUT
+// ENDPOINT CHECKOUT (MAKANAN)
 // ==========================================
 orderRouter.post('/checkout', async (c) => {
   const db = c.env.DB;
@@ -87,7 +87,10 @@ orderRouter.post('/checkout', async (c) => {
       `).bind(item.id).first();
 
       if (dbItem) {
-        subtotal += (dbItem.is_promo === 1 ? dbItem.promo_price : dbItem.price) * item.qty;
+        // Hitung subtotal beserta harga opsi kustom jika ada
+        const baseItemPrice = dbItem.is_promo === 1 ? dbItem.promo_price : dbItem.price;
+        subtotal += (baseItemPrice + (item.additional_price || 0)) * item.qty;
+        
         if(dbItem.restaurant_id) fallbackRestoId = dbItem.restaurant_id;
       }
     }
@@ -120,15 +123,17 @@ orderRouter.post('/checkout', async (c) => {
     const pointData: any = await db.prepare('SELECT balance FROM points WHERE user_id = ?').bind(user.id).first();
     const userPoints = pointData ? pointData.balance : 0;
 
-    // 3. Logika Poin & Final Amount
+    // 3. Logika Poin & Final Amount (Generate Kode Unik vs Potong Poin)
     let finalAmount = baseTotal;
     let pointsUsed = 0;
     let uniqueCode = 0;
 
     if (baseTotal > 0 && userPoints > 0) {
+      // Punya Poin: TIDAK MENGGUNAKAN KODE UNIK, LANGSUNG POTONG POIN
       pointsUsed = Math.min(userPoints, baseTotal);
       finalAmount = baseTotal - pointsUsed;
     } else if (baseTotal > 0) {
+      // Tidak Punya Poin: GENERATE KODE UNIK
       const min = config.unique_min || 1;
       const max = config.unique_max || 999;
       uniqueCode = Math.floor(Math.random() * (max - min + 1)) + min;
@@ -140,7 +145,7 @@ orderRouter.post('/checkout', async (c) => {
     // Gabungkan Catatan ke Alamat
     const finalAddress = body.notes ? `${body.address || '-'} (Catatan: ${body.notes})` : (body.address || '-');
 
-    // 4. INSERT KE TABEL ORDERS (Sinkron dengan Skema Tabel)
+    // 4. INSERT KE TABEL ORDERS 
     await db.prepare(
       `INSERT INTO orders (id, user_id, restaurant_id, total_price, status, address, order_type, payment_method, points_used, coupon_code, coupon_discount) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -158,7 +163,7 @@ orderRouter.post('/checkout', async (c) => {
       couponDiscount
     ).run();
 
-    // 5. INSERT KE TABEL ORDER_DETAILS (Menyimpan item makanan yang dipesan)
+    // 5. INSERT KE TABEL ORDER_DETAILS (Menyimpan rincian dan harga kustom)
     for (const item of body.cart) {
       const odId = crypto.randomUUID();
       const dbItem: any = await db.prepare('SELECT price, promo_price, is_promo FROM menu_items WHERE id = ?').bind(item.id).first();
@@ -170,7 +175,7 @@ orderRouter.post('/checkout', async (c) => {
       ).bind(odId, orderId, item.id, item.qty, finalItemPrice).run();
     }
 
-    // 6. Jika ada sisa kupon -> Tambah Poin
+    // 6. Jika Kupon Sisa, Jadikan Poin
     if (excessCouponValue > 0) {
         await db.prepare(`INSERT INTO points (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance = balance + ?`).bind(user.id, excessCouponValue, excessCouponValue).run();
     }
@@ -193,65 +198,6 @@ orderRouter.post('/checkout', async (c) => {
   }
 });
 
-
-// ==========================================
-// ENDPOINT WEBHOOK (CALLBACK PEMBAYARAN)
-// ==========================================
-orderRouter.post('/webhook', async (c) => {
-  const db = c.env.DB;
-  
-  try {
-    const body = await c.req.json();
-    
-    // Sesuaikan properti body.amount dengan payload dari Mutasi GoPay / Moota Anda.
-    const amountPaid = body.amount || body.gross_amount || body.nominal; 
-    
-    if (!amountPaid) {
-        return c.json({ success: false, message: 'Payload webhook tidak valid (Amount tidak ditemukan)' }, 400);
-    }
-
-    // 1. Cari transaksi UNPAID dengan final_amount persis sama dengan dana yang masuk
-    const tx: any = await db.prepare(
-        `SELECT order_id FROM transactions WHERE final_amount = ? AND status = 'UNPAID'`
-    ).bind(amountPaid).first();
-
-    if (!tx) {
-        // Abaikan & berikan status 200 agar bot mutasi tidak melakukan retry terus menerus
-        return c.json({ success: true, message: 'Transaksi tidak ditemukan atau sudah dibayar' }, 200);
-    }
-
-    const orderId = tx.order_id;
-
-    // 2. Ambil data pesanan untuk memeriksa apakah menggunakan saldo poin
-    const order: any = await db.prepare(
-        `SELECT user_id, points_used FROM orders WHERE id = ?`
-    ).bind(orderId).first();
-
-    // 3. Update Status Transaksi menjadi PAID
-    await db.prepare(
-        `UPDATE transactions SET status = 'PAID' WHERE order_id = ?`
-    ).bind(orderId).run();
-
-    // 4. Update Status Pesanan menjadi PROCESSING (Langsung diproses Dapur)
-    await db.prepare(
-        `UPDATE orders SET status = 'PROCESSING', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-    ).bind(orderId).run();
-
-    // 5. Potong Poin User (Dieksekusi HANYA jika transaksi lunas agar tidak merugikan user jika batal)
-    if (order && order.points_used > 0) {
-        await db.prepare(
-            `UPDATE points SET balance = balance - ? WHERE user_id = ?`
-        ).bind(order.points_used, order.user_id).run();
-    }
-
-    return c.json({ success: true, message: 'Pembayaran berhasil diverifikasi secara otomatis' }, 200);
-
-  } catch (e: any) {
-    console.error("Webhook Error Processing:", e);
-    return c.json({ success: false, message: 'Kesalahan Sistem Webhook Server' }, 500);
-  }
-});
-
 // ==========================================
 // ENDPOINT CHECKOUT VOUCHER (NON-FOOD)
 // ==========================================
@@ -264,12 +210,16 @@ orderRouter.post('/checkout-voucher', async (c) => {
 
   try {
     const config: any = await db.prepare('SELECT * FROM config WHERE id = 1').first();
+    if (!config || !config.master_raw_qris) {
+      return c.json({ success: false, message: 'Sistem pembayaran belum siap.' }, 500);
+    }
+
     let finalAmount = 0;
     let voucherValue = 0;
     let bulkQty = 1;
     let title = "Custom Voucher";
 
-    // Jika beli paket fix dari admin
+    // Cek pembelian dari paket yang disediakan Admin
     if (body.package_id) {
         const pkg: any = await db.prepare('SELECT * FROM voucher_packages WHERE id = ? AND is_active = 1').bind(body.package_id).first();
         if (!pkg) return c.json({ success: false, message: 'Paket voucher tidak valid' }, 400);
@@ -278,7 +228,7 @@ orderRouter.post('/checkout-voucher', async (c) => {
         bulkQty = pkg.bulk_qty;
         title = pkg.title;
     } 
-    // Jika custom nominal
+    // Cek pembelian Nominal Bebas (Custom)
     else if (body.custom_amount) {
         if (body.custom_amount < 10000) return c.json({ success: false, message: 'Minimal custom voucher Rp 10.000' }, 400);
         finalAmount = body.custom_amount;
@@ -287,9 +237,10 @@ orderRouter.post('/checkout-voucher', async (c) => {
         return c.json({ success: false, message: 'Parameter tidak valid' }, 400);
     }
 
+    // Pembuatan ID Transaksi Khusus Voucher (VCH)
     const orderId = 'VCH-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 100);
     
-    // Inject parameter untuk digenerate saat lunas nanti (Disimpan di notes)
+    // Notes ini akan diurai (JSON.parse) oleh webhook.ts saat status lunas, untuk digenerate kodenya
     const notesJson = JSON.stringify({ is_voucher: true, voucher_value: voucherValue, bulk_qty: bulkQty });
 
     await db.prepare(
