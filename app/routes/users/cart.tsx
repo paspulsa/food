@@ -43,12 +43,12 @@ export default createRoute(async (c) => {
         {/* HEADER KERANJANG */}
         <div class="bg-white dark:bg-gray-800 px-4 pt-6 pb-4 shadow-sm sticky top-0 z-30 flex items-center justify-between border-b border-gray-100 dark:border-gray-700">
           <div class="flex items-center gap-3">
-            <a href="/users" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white hover:bg-gray-200 transition-colors">
+            <a href="/users" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path></svg>
             </a>
             <h1 class="text-lg font-black text-gray-900 dark:text-white">Keranjang Saya</h1>
           </div>
-          <button class="text-sm font-bold text-[#ee4d2d]">Hapus Semua</button>
+          <button onclick="clearCart()" class="text-sm font-bold text-[#ee4d2d] hover:underline transition-all">Hapus Semua</button>
         </div>
 
         {/* ALAMAT PENGANTARAN */}
@@ -61,7 +61,7 @@ export default createRoute(async (c) => {
             <div class="flex-1">
               <div class="flex justify-between items-center mb-1">
                 <h3 class="text-sm font-black text-gray-900 dark:text-white">Alamat Pengantaran</h3>
-                <button class="text-[11px] font-bold text-[#ee4d2d] bg-orange-50 dark:bg-[#ee4d2d]/10 px-2 py-1 rounded">Ubah</button>
+                <a href="/users" class="text-[11px] font-bold text-[#ee4d2d] bg-orange-50 dark:bg-[#ee4d2d]/10 px-2 py-1 rounded hover:bg-orange-100 transition-colors">Ubah</a>
               </div>
               <p class="text-xs font-bold text-gray-700 dark:text-gray-300 mb-0.5">{userName || 'Tamu'}</p>
               <p class="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed" id="cart-address-display">
@@ -71,74 +71,58 @@ export default createRoute(async (c) => {
           </div>
         </div>
 
-        {/* LIST ITEM KERANJANG (Simulasi UI State Kosong/Terisi) */}
+        {/* LIST ITEM KERANJANG (DI-RENDER OLEH JAVASCRIPT) */}
         <div class="px-4">
           <h3 class="text-sm font-black text-gray-900 dark:text-white mb-3">Pesanan Anda</h3>
-          
           <div id="cart-items-container" class="space-y-4">
-            {/* Tampilan ini akan dirender ulang oleh Javascript jika menggunakan LocalStorage. 
-                Saat ini disajikan UI simulasi (*Mockup*) pesanan. */}
-            <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex gap-3 relative">
-              <img src="https://via.placeholder.com/150" class="w-16 h-16 rounded-xl object-cover border border-gray-100 dark:border-gray-600 flex-shrink-0" />
-              <div class="flex flex-col justify-between flex-1">
-                <div>
-                  <h4 class="text-sm font-bold text-gray-900 dark:text-white leading-tight">Nasi Goreng Spesial + Telur</h4>
-                  <p class="text-[10px] text-gray-500 mt-0.5">Catatan: Pedas sedang, jangan pakai sayur.</p>
-                </div>
-                <div class="flex justify-between items-end mt-2">
-                  <span class="text-sm font-black text-[#ee4d2d]">Rp 28.000</span>
-                  <div class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg px-0.5">
-                    <button class="w-7 h-7 flex items-center justify-center text-gray-600 dark:text-gray-300 font-black text-lg">-</button>
-                    <span class="w-6 text-center font-black text-xs text-gray-900 dark:text-white">1</span>
-                    <button class="w-7 h-7 flex items-center justify-center text-[#ee4d2d] font-black text-lg">+</button>
-                  </div>
-                </div>
+            {/* Tempat injeksi list keranjang dari LocalStorage */}
+          </div>
+        </div>
+
+        {/* BUNGKUSAN CHECKOUT (Akan disembunyikan JS jika keranjang kosong) */}
+        <div id="checkout-section">
+          {/* CATATAN TAMBAHAN UNTUK RESTO */}
+          <div class="px-4 mt-6">
+            <textarea id="order-notes" rows={2} class="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-[#ee4d2d] transition-colors resize-none shadow-sm" placeholder="Ada pesan tambahan untuk restoran? (Cth: Minta banyakin saus, jangan pedas)"></textarea>
+          </div>
+
+          {/* RINGKASAN PEMBAYARAN */}
+          <div class="px-4 mt-6">
+            <h3 class="text-sm font-black text-gray-900 dark:text-white mb-3">Ringkasan Pembayaran</h3>
+            <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-3 text-xs font-medium text-gray-600 dark:text-gray-400">
+              <div class="flex justify-between">
+                <span id="summary-item-count">Subtotal Harga (0 Barang)</span>
+                <span id="summary-subtotal" class="font-bold text-gray-900 dark:text-white">Rp 0</span>
+              </div>
+              <div class="flex justify-between">
+                <span>Ongkos Kirim</span>
+                <span id="summary-ongkir" class="font-bold text-gray-900 dark:text-white">Rp 0</span>
+              </div>
+              <div class="flex justify-between border-b border-dashed border-gray-200 dark:border-gray-600 pb-3">
+                <span>Biaya Layanan & Pengemasan</span>
+                <span id="summary-layanan" class="font-bold text-gray-900 dark:text-white">Rp 0</span>
+              </div>
+              <div class="flex justify-between pt-1">
+                <span class="font-black text-sm text-gray-900 dark:text-white">Total Pembayaran</span>
+                <span id="summary-grandtotal" class="font-black text-lg text-[#ee4d2d]">Rp 0</span>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* CATATAN TAMBAHAN UNTUK RESTO */}
-        <div class="px-4 mt-6">
-          <textarea rows={2} class="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-[#ee4d2d] transition-colors resize-none shadow-sm" placeholder="Ada pesan tambahan untuk restoran? (Cth: Minta banyakin saus)"></textarea>
-        </div>
-
-        {/* RINGKASAN PEMBAYARAN */}
-        <div class="px-4 mt-6">
-          <h3 class="text-sm font-black text-gray-900 dark:text-white mb-3">Ringkasan Pembayaran</h3>
-          <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-3 text-xs font-medium text-gray-600 dark:text-gray-400">
-            <div class="flex justify-between">
-              <span>Subtotal Harga (1 Barang)</span>
-              <span class="font-bold text-gray-900 dark:text-white">Rp 28.000</span>
-            </div>
-            <div class="flex justify-between">
-              <span>Ongkos Kirim</span>
-              <span class="font-bold text-gray-900 dark:text-white">Rp 10.000</span>
-            </div>
-            <div class="flex justify-between border-b border-dashed border-gray-200 dark:border-gray-600 pb-3">
-              <span>Biaya Layanan & Pengemasan</span>
-              <span class="font-bold text-gray-900 dark:text-white">Rp 3.000</span>
-            </div>
-            <div class="flex justify-between pt-1">
-              <span class="font-black text-sm text-gray-900 dark:text-white">Total Pembayaran</span>
-              <span class="font-black text-lg text-[#ee4d2d]">Rp 41.000</span>
-            </div>
+          {/* WIDGET FIXED BUTTON CHECKOUT */}
+          <div class="fixed bottom-[60px] left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 p-4 z-40 pb-safe">
+            <button onclick="processCheckout()" class="w-full bg-[#ee4d2d] text-white font-black py-4 rounded-2xl shadow-lg shadow-[#ee4d2d]/30 active:scale-[0.98] transition-transform flex justify-between px-5 items-center">
+              <span class="text-sm">Pesan & Antar Sekarang</span>
+              <span id="checkout-btn-price" class="text-sm bg-white/20 px-3 py-1 rounded-lg">Rp 0</span>
+            </button>
           </div>
         </div>
 
-        {/* WIDGET FIXED BUTTON CHECKOUT */}
-        <div class="fixed bottom-[60px] left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 p-4 z-40 pb-safe">
-          <button class="w-full bg-[#ee4d2d] text-white font-black py-4 rounded-2xl shadow-lg shadow-[#ee4d2d]/30 active:scale-[0.98] transition-transform flex justify-between px-5 items-center">
-            <span class="text-sm">Pesan & Antar Sekarang</span>
-            <span class="text-sm bg-white/20 px-3 py-1 rounded-lg">Rp 41.000</span>
-          </button>
-        </div>
-
         {/* BOTTOM NAVIGATION BAR (FIXED) */}
-        <div class="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.08)] z-[40]">
+        <div class="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.08)] z-[50]">
           <div class="flex justify-around items-center h-[60px] px-2 pb-safe">
             <a href="/users" class="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 hover:text-[#ee4d2d] transition-colors">
-              <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg>
+              <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg>
               <span class="text-[10px] font-semibold">Home</span>
             </a>
             <a href="/users/promos" class="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 hover:text-[#ee4d2d] transition-colors">
@@ -163,18 +147,135 @@ export default createRoute(async (c) => {
 
       </div>
 
+      {/* SCRIPT LOGIKA KERANJANG (CLIENT-SIDE) */}
       <script dangerouslySetInnerHTML={{ __html: `
-        // Inisialisasi Alamat dari LocalStorage jika belum login
-        document.addEventListener('DOMContentLoaded', () => {
-          const dbAddress = \`${userAddress}\`;
-          if (!dbAddress) {
+        const DB_ADDRESS = \`${userAddress}\`;
+        const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
+        
+        // Konstanta Biaya
+        const BIAYA_ONGKIR = 10000;
+        const BIAYA_LAYANAN = 3000;
+
+        // Ambil Data Keranjang dari LocalStorage (jika belum ada, array kosong)
+        let cart = JSON.parse(localStorage.getItem('spos_cart')) || [];
+
+        function initAddress() {
+          if (!DB_ADDRESS) {
             const savedAddress = localStorage.getItem('user_saved_address');
             if (savedAddress) {
               document.getElementById('cart-address-display').innerText = savedAddress;
             }
           }
+        }
+
+        function saveCart() {
+          localStorage.setItem('spos_cart', JSON.stringify(cart));
+          renderCart();
+        }
+
+        function clearCart() {
+          if(cart.length === 0) return;
+          if(confirm('Apakah Anda yakin ingin mengosongkan keranjang?')) {
+            cart = [];
+            saveCart();
+          }
+        }
+
+        function updateQty(index, delta) {
+          if (cart[index].qty + delta <= 0) {
+            if(confirm('Hapus item ini dari keranjang?')) {
+              cart.splice(index, 1);
+            }
+          } else {
+            cart[index].qty += delta;
+          }
+          saveCart();
+        }
+
+        function renderCart() {
+          const container = document.getElementById('cart-items-container');
+          const checkoutSection = document.getElementById('checkout-section');
+          const badge = document.getElementById('nav-cart-badge');
+
+          // Jika Keranjang Kosong
+          if (cart.length === 0) {
+            container.innerHTML = \`
+              <div class="text-center py-10 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
+                 <div class="text-5xl mb-4">🛒</div>
+                 <h4 class="font-bold text-gray-900 dark:text-white">Keranjang masih kosong</h4>
+                 <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Yuk, cari makanan lezat sekarang!</p>
+                 <a href="/users" class="mt-5 inline-block bg-[#ee4d2d] text-white px-6 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-orange-500/30 hover:bg-orange-700 transition-colors">Mulai Pesan</a>
+              </div>
+            \`;
+            checkoutSection.classList.add('hidden');
+            if(badge) badge.classList.add('hidden');
+            return;
+          }
+
+          // Jika Keranjang Ada Isinya
+          checkoutSection.classList.remove('hidden');
+          
+          let html = '';
+          let subtotal = 0;
+          let totalItems = 0;
+
+          cart.forEach((item, index) => {
+            const itemTotal = item.price * item.qty;
+            subtotal += itemTotal;
+            totalItems += item.qty;
+
+            html += \`
+              <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 flex gap-3 relative transition-all">
+                <img src="\${item.image || 'https://via.placeholder.com/150'}" class="w-16 h-16 rounded-xl object-cover border border-gray-100 dark:border-gray-600 flex-shrink-0" />
+                <div class="flex flex-col justify-between flex-1">
+                  <div>
+                    <h4 class="text-sm font-bold text-gray-900 dark:text-white leading-tight line-clamp-2">\${item.name}</h4>
+                    \${item.note ? \`<p class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-1">Kustom: \${item.note}</p>\` : ''}
+                  </div>
+                  <div class="flex justify-between items-end mt-2">
+                    <span class="text-sm font-black text-[#ee4d2d]">\${formatter.format(itemTotal)}</span>
+                    <div class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg px-0.5 border border-gray-200 dark:border-gray-600">
+                      <button onclick="updateQty(\${index}, -1)" class="w-7 h-7 flex items-center justify-center text-gray-600 dark:text-gray-300 font-black text-lg hover:bg-gray-200 dark:hover:bg-gray-600 rounded-l-lg transition">-</button>
+                      <span class="w-6 text-center font-black text-xs text-gray-900 dark:text-white">\${item.qty}</span>
+                      <button onclick="updateQty(\${index}, 1)" class="w-7 h-7 flex items-center justify-center text-[#ee4d2d] font-black text-lg hover:bg-gray-200 dark:hover:bg-gray-600 rounded-r-lg transition">+</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            \`;
+          });
+
+          container.innerHTML = html;
+
+          // Hitung Ringkasan Total Pembayaran
+          const grandTotal = subtotal + BIAYA_ONGKIR + BIAYA_LAYANAN;
+
+          document.getElementById('summary-item-count').innerText = \`Subtotal Harga (\${totalItems} Barang)\`;
+          document.getElementById('summary-subtotal').innerText = formatter.format(subtotal);
+          document.getElementById('summary-ongkir').innerText = formatter.format(BIAYA_ONGKIR);
+          document.getElementById('summary-layanan').innerText = formatter.format(BIAYA_LAYANAN);
+          document.getElementById('summary-grandtotal').innerText = formatter.format(grandTotal);
+          document.getElementById('checkout-btn-price').innerText = formatter.format(grandTotal);
+
+          if(badge) {
+            badge.innerText = totalItems;
+            badge.classList.remove('hidden');
+          }
+        }
+
+        function processCheckout() {
+          // Disini nanti logika untuk menembak API pembuatan Order (POST /api/v1/protected/user/orders)
+          alert('Proses Checkout Berhasil Dijalankan! Melanjutkan ke pembayaran...');
+          // Contoh integrasi ke depan:
+          // fetch('/api/v1/protected/user/orders', { method: 'POST', body: JSON.stringify(...) })
+        }
+
+        // Jalankan Inisialisasi
+        document.addEventListener('DOMContentLoaded', () => {
+          initAddress();
+          renderCart();
         });
       `}} />
     </div>
-  , { title: 'Keranjang Saya - ShopeeFood Clone' })
+  , { title: 'Keranjang Saya - Kedai Pangsit Kembar 88' })
 })
