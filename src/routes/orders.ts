@@ -36,9 +36,9 @@ function injectAmount(qrisRaw: string, amount: number) {
     try {
         const tags = parseTlv(qrisRaw);
         delete tags['63']; 
-        tags['53'] = '360'; 
-        tags['54'] = amount.toFixed(2); 
-        tags['58'] = 'ID'; 
+        tags['53'] = '360';
+        tags['54'] = amount.toFixed(2);
+        tags['58'] = 'ID';
         
         const sortedKeys = Object.keys(tags).sort();
         let newTlv = '';
@@ -56,149 +56,109 @@ function injectAmount(qrisRaw: string, amount: number) {
 }
 
 // ==========================================
-// ENDPOINT CHECKOUT (MEMPROSES PESANAN & QRIS)
+// ENDPOINT CHECKOUT
 // ==========================================
 orderRouter.post('/checkout', async (c) => {
   const db = c.env.DB;
   const user = c.get('jwtPayload'); 
   const body = await c.req.json();
   
-  if (!user || !user.id) return c.json({ success: false, message: 'Harap login terlebih dahulu.' }, 401);
-  if (!body.cart || !Array.isArray(body.cart) || body.cart.length === 0) return c.json({ success: false, message: 'Keranjang pesanan kosong.' }, 400);
+  if (!user || !user.id) return c.json({ success: false, message: 'Harap login.' }, 401);
+  if (!body.cart || body.cart.length === 0) return c.json({ success: false, message: 'Keranjang kosong.' }, 400);
 
   try {
+    const settings: any = await db.prepare('SELECT * FROM delivery_settings WHERE id = "default-settings"').first();
     const config: any = await db.prepare('SELECT * FROM config WHERE id = 1').first();
+    
     if (!config || !config.master_raw_qris) {
-      return c.json({ success: false, message: 'Sistem pembayaran sedang tidak tersedia.' }, 500);
+      return c.json({ success: false, message: 'Sistem pembayaran belum siap.' }, 500);
     }
 
-    // 1. Kalkulasi Subtotal dari Database & Cari Restaurant ID
+    // 1. Kalkulasi Subtotal & Ekstrak ID Restoran dari keranjang pertama
     let subtotal = 0;
-    let targetRestaurantId = '';
+    let fallbackRestoId = 'default_resto';
 
     for (const item of body.cart) {
-      // Join ke menu_categories untuk mendapatkan restaurant_id
       const dbItem: any = await db.prepare(`
         SELECT m.price, m.promo_price, m.is_promo, c.restaurant_id 
-        FROM menu_items m 
-        JOIN menu_categories c ON m.category_id = c.id 
+        FROM menu_items m
+        LEFT JOIN menu_categories c ON m.category_id = c.id
         WHERE m.id = ?
       `).bind(item.id).first();
-      
+
       if (dbItem) {
-        const itemPrice = dbItem.is_promo === 1 ? dbItem.promo_price : dbItem.price;
-        subtotal += (itemPrice + (item.additional_price || 0)) * item.qty;
-        
-        // Ambil ID restoran dari item pertama yang valid
-        if (!targetRestaurantId) {
-          targetRestaurantId = dbItem.restaurant_id;
-        }
+        subtotal += (dbItem.is_promo === 1 ? dbItem.promo_price : dbItem.price) * item.qty;
+        if(dbItem.restaurant_id) fallbackRestoId = dbItem.restaurant_id;
       }
     }
 
-    // Fallback jika restaurant_id gagal ditarik
-    if (!targetRestaurantId) {
-      const fallbackResto: any = await db.prepare('SELECT id FROM restaurants LIMIT 1').first();
-      targetRestaurantId = fallbackResto ? fallbackResto.id : 'default-resto';
-    }
+    // Tentukan Ongkir dari Body
+    let ongkir = typeof body.ongkir === 'number' ? body.ongkir : (settings?.mid_range_price || 10000);
 
-    // 2. Baca Ongkir dari Body Frontend
-    let deliveryFee = typeof body.ongkir === 'number' ? body.ongkir : 10000;
-    
-    // BIAYA PENGEMASAN & LAYANAN DIHAPUS 100% SESUAI PERMINTAAN
-    const serviceFee = 0; 
-    const totalBeforeDiscount = subtotal + deliveryFee + serviceFee;
-
-    // 3. Kalkulasi Kupon Diskon
-    let rawCouponDiscount = 0;
-    let appliedCouponDiscount = 0;
-    let excessCouponValue = 0; 
-
+    // 2. Kalkulasi Diskon Kupon
+    let couponDiscount = 0;
+    let excessCouponValue = 0;
     if (body.coupon_code) {
       const coupon: any = await db.prepare('SELECT * FROM coupons WHERE code = ? AND is_active = 1').bind(body.coupon_code).first();
       if (coupon && subtotal >= coupon.min_purchase) {
-        if (coupon.discount_type === 'PERCENTAGE') {
-          rawCouponDiscount = Math.floor(subtotal * (coupon.discount_value / 100));
-          if (coupon.max_discount > 0 && rawCouponDiscount > coupon.max_discount) {
-             rawCouponDiscount = coupon.max_discount;
-          }
-        } else {
-          rawCouponDiscount = coupon.discount_value; 
-        }
-
-        if (rawCouponDiscount > totalBeforeDiscount) {
-          appliedCouponDiscount = totalBeforeDiscount; 
-          excessCouponValue = rawCouponDiscount - totalBeforeDiscount; 
-        } else {
-          appliedCouponDiscount = rawCouponDiscount;
-        }
+        const rawDiscount = coupon.discount_type === 'PERCENTAGE' 
+          ? Math.min(Math.floor(subtotal * (coupon.discount_value / 100)), coupon.max_discount || subtotal)
+          : coupon.discount_value;
         
+        const totalBefore = subtotal + ongkir;
+        if (rawDiscount > totalBefore) {
+            couponDiscount = totalBefore;
+            excessCouponValue = rawDiscount - totalBefore;
+        } else {
+            couponDiscount = rawDiscount;
+        }
         await db.prepare('UPDATE coupons SET used_count = used_count + 1 WHERE code = ?').bind(coupon.code).run();
       }
     }
 
-    const baseTotal = totalBeforeDiscount - appliedCouponDiscount;
-
-    // 4. Kalkulasi Point Wallet
+    const baseTotal = Math.max(0, subtotal + ongkir - couponDiscount);
     const pointData: any = await db.prepare('SELECT balance FROM points WHERE user_id = ?').bind(user.id).first();
     const userPoints = pointData ? pointData.balance : 0;
 
+    // 3. Logika Poin & Final Amount
     let finalAmount = baseTotal;
     let pointsUsed = 0;
-    let uniqueCodeGenerated = 0;
+    let uniqueCode = 0;
 
-    if (baseTotal > 0) {
-        if (userPoints > 0) {
-          pointsUsed = Math.min(userPoints, baseTotal);
-          finalAmount = baseTotal - pointsUsed;
-        } else {
-          const min = config.unique_min || 1;
-          const max = config.unique_max || 999;
-          const now = Math.floor(Date.now() / 1000);
-          
-          let isCollision = true;
-          let attempts = 0;
-          
-          while (isCollision && attempts < 15) {
-            uniqueCodeGenerated = Math.floor(Math.random() * (max - min + 1)) + min;
-            finalAmount = baseTotal + uniqueCodeGenerated;
-            
-            const exists = await db.prepare("SELECT id FROM transactions WHERE final_amount = ? AND status = 'UNPAID' AND expired_at > ?").bind(finalAmount, now).first();
-            if (!exists) isCollision = false;
-            attempts++;
-          }
-          
-          if (isCollision) return c.json({ success: false, message: 'Server pembayaran sedang sibuk.' }, 503);
-        }
+    if (baseTotal > 0 && userPoints > 0) {
+      pointsUsed = Math.min(userPoints, baseTotal);
+      finalAmount = baseTotal - pointsUsed;
+    } else if (baseTotal > 0) {
+      const min = config.unique_min || 1;
+      const max = config.unique_max || 999;
+      uniqueCode = Math.floor(Math.random() * (max - min + 1)) + min;
+      finalAmount = baseTotal + uniqueCode;
     }
 
-    const orderId = 'ORD-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000);
-    
-    // Gabungkan Catatan (Notes) ke dalam Alamat karena tabel asli tidak punya kolom notes
-    const finalAddress = body.notes ? `${body.address} (Catatan: ${body.notes})` : body.address;
-    const orderStatus = finalAmount <= 0 ? 'PROCESSING' : 'PENDING';
-    const paymentMethod = finalAmount <= 0 ? 'POINT/COUPON' : 'QRIS';
+    const orderId = 'ORD-' + Date.now().toString().slice(-6);
 
-    // ==========================================
-    // 5. INSERT KE TABEL ORDERS & ORDER_DETAILS
-    // ==========================================
+    // Gabungkan Catatan ke Alamat
+    const finalAddress = body.notes ? `${body.address || '-'} (Catatan: ${body.notes})` : (body.address || '-');
+
+    // 4. INSERT KE TABEL ORDERS (Sinkron dengan Skema Tabel)
     await db.prepare(
       `INSERT INTO orders (id, user_id, restaurant_id, total_price, status, address, order_type, payment_method, points_used, coupon_code, coupon_discount) 
-       VALUES (?, ?, ?, ?, ?, ?, 'DELIVERY', ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).bind(
       orderId, 
       user.id, 
-      targetRestaurantId, 
+      body.restaurant_id || fallbackRestoId, 
       baseTotal, 
-      orderStatus, 
-      finalAddress, 
-      paymentMethod,
-      pointsUsed, 
-      body.coupon_code || null, 
-      appliedCouponDiscount
+      finalAmount === 0 ? 'PROCESSING' : 'PENDING', 
+      finalAddress,
+      'DELIVERY', 
+      finalAmount === 0 ? 'POINTS' : 'QRIS', 
+      pointsUsed,
+      body.coupon_code || null,
+      couponDiscount
     ).run();
 
-    // Insert rincian pesanan ke tabel order_details
+    // 5. INSERT KE TABEL ORDER_DETAILS (Menyimpan item makanan yang dipesan)
     for (const item of body.cart) {
       const odId = crypto.randomUUID();
       const dbItem: any = await db.prepare('SELECT price, promo_price, is_promo FROM menu_items WHERE id = ?').bind(item.id).first();
@@ -210,47 +170,84 @@ orderRouter.post('/checkout', async (c) => {
       ).bind(odId, orderId, item.id, item.qty, finalItemPrice).run();
     }
 
-    // ==========================================
-    // 6. SKENARIO LUNAS (Tagihan 0)
-    // ==========================================
-    if (finalAmount <= 0) {
-        const netPointsChange = excessCouponValue - pointsUsed;
-        if (netPointsChange !== 0) {
-            await db.prepare(`
-                INSERT INTO points (user_id, balance) VALUES (?, ?)
-                ON CONFLICT(user_id) DO UPDATE SET balance = balance + ?
-            `).bind(user.id, Math.max(0, netPointsChange), netPointsChange).run();
-        }
-
-        return c.json({ success: true, message: 'Pesanan berhasil dibuat (Otomatis Lunas)', data: { order_id: orderId, final_amount: 0 } });
-    }
-
-    // ==========================================
-    // 7. SKENARIO QRIS BAYAR NORMAL
-    // ==========================================
+    // 6. Jika ada sisa kupon -> Tambah Poin
     if (excessCouponValue > 0) {
-        await db.prepare(`
-            INSERT INTO points (user_id, balance) VALUES (?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET balance = balance + ?
-        `).bind(user.id, excessCouponValue, excessCouponValue).run();
+        await db.prepare(`INSERT INTO points (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance = balance + ?`).bind(user.id, excessCouponValue, excessCouponValue).run();
     }
 
-    const nowTimestamp = Math.floor(Date.now() / 1000);
-    const expiredAt = nowTimestamp + (30 * 60); 
-    
-    const rawQris = injectAmount(config.master_raw_qris, finalAmount);
-    if (!rawQris) {
-        return c.json({ success: false, message: 'Gagal membuat QRIS dinamis.' }, 500);
+    // 7. Transaksi QRIS (Jika ada tagihan)
+    if (finalAmount > 0) {
+      const rawQris = injectAmount(config.master_raw_qris, finalAmount);
+      const nowTimestamp = Math.floor(Date.now() / 1000);
+      const expiredAt = nowTimestamp + 1800; // 30 Menit
+      
+      await db.prepare(
+        `INSERT INTO transactions (order_id, amount, unique_code, final_amount, raw_qris, status, created_at, expired_at) 
+         VALUES (?, ?, ?, ?, ?, 'UNPAID', ?, ?)`
+      ).bind(orderId, baseTotal, uniqueCode, finalAmount, rawQris, nowTimestamp, expiredAt).run();
     }
+
+    return c.json({ success: true, data: { order_id: orderId, final_amount: finalAmount } });
+  } catch (e: any) {
+    return c.json({ success: false, message: e.message }, 500);
+  }
+});
+
+
+// ==========================================
+// ENDPOINT WEBHOOK (CALLBACK PEMBAYARAN)
+// ==========================================
+orderRouter.post('/webhook', async (c) => {
+  const db = c.env.DB;
+  
+  try {
+    const body = await c.req.json();
     
+    // Sesuaikan properti body.amount dengan payload dari Mutasi GoPay / Moota Anda.
+    const amountPaid = body.amount || body.gross_amount || body.nominal; 
+    
+    if (!amountPaid) {
+        return c.json({ success: false, message: 'Payload webhook tidak valid (Amount tidak ditemukan)' }, 400);
+    }
+
+    // 1. Cari transaksi UNPAID dengan final_amount persis sama dengan dana yang masuk
+    const tx: any = await db.prepare(
+        `SELECT order_id FROM transactions WHERE final_amount = ? AND status = 'UNPAID'`
+    ).bind(amountPaid).first();
+
+    if (!tx) {
+        // Abaikan & berikan status 200 agar bot mutasi tidak melakukan retry terus menerus
+        return c.json({ success: true, message: 'Transaksi tidak ditemukan atau sudah dibayar' }, 200);
+    }
+
+    const orderId = tx.order_id;
+
+    // 2. Ambil data pesanan untuk memeriksa apakah menggunakan saldo poin
+    const order: any = await db.prepare(
+        `SELECT user_id, points_used FROM orders WHERE id = ?`
+    ).bind(orderId).first();
+
+    // 3. Update Status Transaksi menjadi PAID
     await db.prepare(
-      `INSERT INTO transactions (order_id, amount, unique_code, final_amount, raw_qris, status, created_at, expired_at) 
-       VALUES (?, ?, ?, ?, ?, 'UNPAID', ?, ?)`
-    ).bind(orderId, baseTotal, uniqueCodeGenerated, finalAmount, rawQris, nowTimestamp, expiredAt).run();
+        `UPDATE transactions SET status = 'PAID' WHERE order_id = ?`
+    ).bind(orderId).run();
 
-    return c.json({ success: true, message: 'Pesanan berhasil dibuat!', data: { order_id: orderId, final_amount: finalAmount } });
+    // 4. Update Status Pesanan menjadi PROCESSING (Langsung diproses Dapur)
+    await db.prepare(
+        `UPDATE orders SET status = 'PROCESSING', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).bind(orderId).run();
 
-  } catch (error: any) {
-    return c.json({ success: false, message: 'Error Server: ' + error.message }, 500);
+    // 5. Potong Poin User (Dieksekusi HANYA jika transaksi lunas agar tidak merugikan user jika batal)
+    if (order && order.points_used > 0) {
+        await db.prepare(
+            `UPDATE points SET balance = balance - ? WHERE user_id = ?`
+        ).bind(order.points_used, order.user_id).run();
+    }
+
+    return c.json({ success: true, message: 'Pembayaran berhasil diverifikasi secara otomatis' }, 200);
+
+  } catch (e: any) {
+    console.error("Webhook Error Processing:", e);
+    return c.json({ success: false, message: 'Kesalahan Sistem Webhook Server' }, 500);
   }
 });
