@@ -131,13 +131,13 @@ export default createRoute(async (c) => {
           )}
 
           {/* =========================================================
-              KATEGORI GRID (DENGAN EFEK HOVER ZOOM ELEGAN Z-INDEX)
+              KATEGORI GRID (DENGAN EFEK HOVER ZOOM ELEGAN 175%)
               ========================================================= */}
           <div class="px-4 mt-4">
             <div class="grid grid-cols-6 gap-y-4 gap-x-1 sm:gap-x-2">
               {categories.length > 0 ? categories.map((cat: any) => (
                 <div class="flex flex-col items-center gap-1.5 cursor-pointer group relative z-10 hover:z-50" onclick={`showCategory('${cat.id}', '${cat.name.replace(/'/g, "\\'")}')`}>
-                  <div class="w-[46px] h-[46px] sm:w-[50px] sm:h-[50px] bg-white dark:bg-gray-700 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-600 flex items-center justify-center p-1.5 transition-all duration-300 transform group-hover:scale-200 group-hover:shadow-xl group-hover:bg-orange-50 dark:group-hover:bg-gray-600 overflow-hidden">
+                  <div class="w-[46px] h-[46px] sm:w-[50px] sm:h-[50px] bg-white dark:bg-gray-700 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-600 flex items-center justify-center p-1.5 transition-all duration-300 transform group-hover:scale-[1.75] group-hover:shadow-xl group-hover:bg-orange-50 dark:group-hover:bg-gray-600 overflow-hidden">
                     <img src={cat.image || `https://ui-avatars.com/api/?name=${cat.name}&background=ee4d2d&color=fff`} class="w-full h-full object-contain" alt={cat.name} />
                   </div>
                   <span class="text-[9px] text-center font-bold text-gray-700 dark:text-gray-300 leading-tight line-clamp-2 px-0.5 group-hover:text-[#ee4d2d] transition-colors">{cat.name}</span>
@@ -170,14 +170,14 @@ export default createRoute(async (c) => {
               PALING LAKU DI SEKITARMU (BEST SELLERS)
               ========================================================= */}
           {bestSellers.length > 0 && (
-            <div class="mt-4 pb-2 w-full overflow-hidden">
+            <div class="mt-4">
               <div class="px-4 flex justify-between items-center mb-3">
                 <h3 class="text-base font-black text-gray-900 dark:text-white flex items-center gap-1.5">
                   <span class="text-xl">🔥</span> Paling Laku di Sekitarmu
                 </h3>
               </div>
               
-              <div class="flex overflow-x-auto snap-x snap-mandatory gap-2.5 px-4 hide-scrollbar pb-4 pt-1 w-full">
+              <div class="flex overflow-x-auto snap-x snap-mandatory gap-2.5 px-4 hide-scrollbar pb-4 pt-1">
                 {bestSellers.map((item: any, index: number) => {
                   const isOutOfStock = item.stock === 0;
                   const currentPrice = item.is_promo ? item.promo_price : item.price;
@@ -388,7 +388,7 @@ export default createRoute(async (c) => {
             MODAL BOTTOM SHEET DETAIL PRODUK & KUSTOMISASI (SPOILER)
             ========================================================= */}
         <div id="product-detail-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] hidden flex flex-col justify-end opacity-0 transition-opacity duration-300">
-          <div class="bg-white dark:bg-gray-800 w-full max-w-md mx-auto rounded-t-3xl max-h-[85vh] flex flex-col transform translate-y-full transition-transform duration-300" id="pdm-inner">
+          <div class="bg-white dark:bg-gray-800 w-full max-w-md mx-auto rounded-t-3xl max-h-[85vh] flex flex-col transform translate-y-full transition-transform duration-300 mb-[60px]" id="pdm-inner">
             
             <div class="relative h-56 bg-gray-100 dark:bg-gray-700 rounded-t-3xl flex-shrink-0">
               <img id="pdm-image" src="" class="w-full h-full object-cover rounded-t-3xl" />
@@ -405,17 +405,16 @@ export default createRoute(async (c) => {
                  <span id="pdm-original-price" class="text-xs font-bold text-gray-400 dark:text-gray-500 line-through hidden"></span>
               </div>
               
-              {/* Tempat Injeksi Opsi Custom HTML (SPOILER / ACCORDION) */}
               <div id="pdm-custom-container" class="mt-6 space-y-3"></div>
             </div>
 
-            <div class="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 flex items-center gap-4 flex-shrink-0 pb-safe shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]">
-              <div class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-xl px-1 border border-gray-200 dark:border-gray-600">
-                <button onclick="updateQty(-1)" class="w-10 h-10 flex items-center justify-center text-gray-600 dark:text-gray-300 font-black text-xl hover:bg-gray-200 dark:hover:bg-gray-600 rounded-l-xl transition">-</button>
-                <span id="pdm-qty" class="w-6 text-center font-black text-gray-900 dark:text-white">1</span>
-                <button onclick="updateQty(1)" class="w-10 h-10 flex items-center justify-center text-[#ee4d2d] font-black text-xl hover:bg-gray-200 dark:hover:bg-gray-600 rounded-r-xl transition">+</button>
+            <div class="p-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 flex items-center gap-3 flex-shrink-0 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]">
+              <div class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg px-1 border border-gray-200 dark:border-gray-600">
+                <button onclick="updateQty(-1)" class="w-8 h-8 flex items-center justify-center text-gray-600 dark:text-gray-300 font-bold text-lg hover:bg-gray-200 dark:hover:bg-gray-600 rounded-l-lg transition">-</button>
+                <span id="pdm-qty" class="w-6 text-center font-bold text-sm text-gray-900 dark:text-white">1</span>
+                <button onclick="updateQty(1)" class="w-8 h-8 flex items-center justify-center text-[#ee4d2d] font-bold text-lg hover:bg-gray-200 dark:hover:bg-gray-600 rounded-r-lg transition">+</button>
               </div>
-              <button id="pdm-add-btn" class="flex-1 bg-[#ee4d2d] text-white py-3.5 rounded-xl font-bold shadow-md shadow-[#ee4d2d]/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2" onclick="submitProductToCart()">
+              <button id="pdm-add-btn" class="flex-1 bg-[#ee4d2d] text-white py-2.5 px-3 rounded-lg text-sm font-bold shadow-sm shadow-[#ee4d2d]/30 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5" onclick="submitProductToCart()">
                 <span>Tambah</span>
                 <span class="w-1 h-1 rounded-full bg-white/50"></span>
                 <span id="pdm-total-btn-price"></span>
@@ -430,7 +429,7 @@ export default createRoute(async (c) => {
         <div class="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.08)] z-[40]">
           <div class="flex justify-around items-center h-[60px] px-2 pb-safe">
             <a href="/users" class="flex flex-col items-center gap-1 text-[#ee4d2d]">
-              <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg>
+              <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg>
               <span class="text-[10px] font-bold">Home</span>
             </a>
             <a href="/users/promos" class="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 hover:text-[#ee4d2d] transition-colors">
@@ -642,7 +641,6 @@ export default createRoute(async (c) => {
           resultsContainer.classList.remove('hidden');
         }
 
-        // Menutup dropdown search jika mengklik area luar
         document.addEventListener('click', (e) => {
           const searchInput = document.getElementById('search-input');
           const searchResults = document.getElementById('search-results');
@@ -651,7 +649,7 @@ export default createRoute(async (c) => {
           }
         });
 
-        // --- 5. FILTER KATEGORI IN-PLACE (Ganti Grid Rekomendasi) ---
+        // --- 5. FILTER KATEGORI INSTAN SPA ---
         function showCategory(categoryId, categoryName) {
           const container = document.getElementById('dynamic-category-container');
           const titleName = document.getElementById('dynamic-category-name');
@@ -708,10 +706,10 @@ export default createRoute(async (c) => {
           badge.style.transform = 'scale(1.4)';
           setTimeout(() => badge.style.transform = 'scale(1)', 200);
 
-          showToast(name + ' ditambahkan ke keranjang');
+          showToast(name + ' ditambahkan ke pesanan!');
         }
 
-        // --- 7. LOGIKA MODAL BOTTOM SHEET DETAIL PRODUK & KUSTOMISASI (SPOILER) ---
+        // --- 7. LOGIKA MODAL BOTTOM SHEET DETAIL PRODUK & KUSTOMISASI JSON ---
         function openProductDetail(id) {
           const item = PRODUCTS.find(p => p.id === id);
           if(!item) return;
@@ -735,7 +733,6 @@ export default createRoute(async (c) => {
              orig.classList.add('hidden');
           }
 
-          // Build UI untuk opsi kustomisasi (Parse JSON) dengan gaya Spoiler (Details/Summary)
           const container = document.getElementById('pdm-custom-container');
           container.innerHTML = '';
           additionalPrice = 0;
@@ -757,7 +754,6 @@ export default createRoute(async (c) => {
                        <div class="p-3 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">
                    \`;
 
-                   // Render array menu/opsi
                    const choices = optGroup.choices || optGroup.options || [];
                    choices.forEach((opt, optIdx) => {
                      const inputType = optGroup.type === 'radio' ? 'radio' : 'checkbox';
@@ -818,7 +814,6 @@ export default createRoute(async (c) => {
 
         function submitProductToCart() {
            const finalPrice = (basePrice + additionalPrice) * currentQty;
-           // Tambah jumlah berdasarkan Quantity yang dipilih di modal
            for(let i=0; i < currentQty; i++){
               cartItems += 1;
               cartTotal += (basePrice + additionalPrice);
@@ -841,5 +836,5 @@ export default createRoute(async (c) => {
         });
       `}} />
     </div>
-  , { title: 'Home - ShopeeFood Clone' })
+  , { title: 'Home - Kedai Pangsit Kembar 88' })
 })
