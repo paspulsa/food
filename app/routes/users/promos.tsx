@@ -68,7 +68,7 @@ export default createRoute(async (c) => {
         </div>
 
         {/* ==============================================
-            TAB 1: MENU PROMO (Tampilan Asli)
+            TAB 1: MENU PROMO
             ============================================== */}
         <div id="tab-promo" class="block animate-fade-in">
             {appPromos.length > 0 && (
@@ -144,7 +144,7 @@ export default createRoute(async (c) => {
                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5 2a2 2 0 00-2 2v14l3.5-2 3.5 2 3.5-2 3.5 2V4a2 2 0 00-2-2H5zm4.707 3.707a1 1 0 00-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L8.414 9H14a1 1 0 100-2H8.414l1.293-1.293z" clip-rule="evenodd"></path></svg>
                  Kirim Hadiah Praktis!
               </h3>
-              <p class="text-[10px] text-blue-600 dark:text-blue-400">Beli e-Voucher ini untuk Anda gunakan sendiri atau berikan *screenshot*-nya ke teman dan keluarga sebagai traktiran!</p>
+              <p class="text-[10px] text-blue-600 dark:text-blue-400">Beli e-Voucher ini untuk Anda gunakan sendiri atau berikan screenshot-nya ke teman dan keluarga sebagai traktiran!</p>
            </div>
 
            <h3 class="text-base font-black text-gray-900 dark:text-white mb-3">Paket Voucher Hemat</h3>
@@ -158,7 +158,7 @@ export default createRoute(async (c) => {
                       {vp.sell_price < (vp.voucher_value * vp.bulk_qty) && <span class="text-[9px] line-through opacity-70">{formatter.format(vp.voucher_value * vp.bulk_qty)}</span>}
                       <span class="text-sm font-bold">Harga: {formatter.format(vp.sell_price)}</span>
                    </div>
-                   <button onclick={`buyVoucherTemplate('${vp.id}')`} class="mt-3 w-full bg-white text-[#ee4d2d] text-xs font-black py-2 rounded-xl shadow active:scale-95 transition-transform">Beli Sekarang</button>
+                   <button onclick={`buyVoucherTemplate('${vp.id}')`} class="mt-3 w-full bg-white text-[#ee4d2d] text-xs font-black py-2 rounded-xl shadow active:scale-95 transition-transform relative z-10">Beli Sekarang</button>
                 </div>
               ))}
            </div>
@@ -275,8 +275,8 @@ export default createRoute(async (c) => {
         </div>
       </div>
 
-      <script dangerouslySetInnerHTML={{ __html: \`
-        const PRODUCTS = \${safeItemsJson};
+      <script dangerouslySetInnerHTML={{ __html: `
+        const PRODUCTS = ${safeItemsJson};
         const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
         let cart = JSON.parse(localStorage.getItem('spos_cart')) || [];
         let currentActiveProduct = null;
@@ -413,7 +413,7 @@ export default createRoute(async (c) => {
            try {
               const parsedData = JSON.parse(item.custom_options); const options = Array.isArray(parsedData) ? parsedData : (parsedData.builder || []);
               options.forEach((optGroup, groupIdx) => {
-                 let html = \`<details class="group border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-800 transition-all duration-300 shadow-sm" open><summary class="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-700/50 cursor-pointer select-none outline-none"><div class="flex items-center gap-2"><h4 class="font-black text-gray-900 dark:text-white text-sm">\${optGroup.title || optGroup.name}</h4>\${optGroup.is_required || optGroup.required ? '<span class="text-[9px] font-bold bg-orange-100 dark:bg-[#ee4d2d]/20 text-[#ee4d2d] px-1.5 py-0.5 rounded">Wajib</span>' : '<span class="text-[9px] font-medium text-gray-500 dark:text-gray-400">Opsional</span>'}</div><svg class="w-5 h-5 text-gray-400 dark:text-gray-500 transform group-open:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7-7-7-7"></path></svg></summary><div class="p-3 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">\`;
+                 let html = \`<details class="group border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-800 transition-all duration-300 shadow-sm" open><summary class="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-700/50 cursor-pointer select-none outline-none"><div class="flex items-center gap-2"><h4 class="font-black text-gray-900 dark:text-white text-sm">\${optGroup.title || optGroup.name}</h4>\${optGroup.is_required || optGroup.required ? '<span class="text-[9px] font-bold bg-orange-100 dark:bg-[#ee4d2d]/20 text-[#ee4d2d] px-1.5 py-0.5 rounded">Wajib</span>' : '<span class="text-[9px] font-medium text-gray-500 dark:text-gray-400">Opsional</span>'}</div><svg class="w-5 h-5 text-gray-400 dark:text-gray-500 transform group-open:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7-7-7-7"></path></svg></summary><div class="p-3 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">\`;
                  const choices = optGroup.choices || optGroup.options || [];
                  choices.forEach((opt, optIdx) => {
                    const inputType = optGroup.type === 'radio' ? 'radio' : 'checkbox'; const inputName = \`custom_\${groupIdx}\`; const priceText = opt.price > 0 ? \`+ \${formatter.format(opt.price)}\` : 'Gratis';
@@ -439,7 +439,7 @@ export default createRoute(async (c) => {
         function recalculateModalPrice() { additionalPrice = 0; document.querySelectorAll('#pdm-custom-container input:checked').forEach(i => { additionalPrice += parseInt(i.value) || 0; }); const total = (basePrice + additionalPrice) * currentQty; document.getElementById('pdm-total-btn-price').innerText = formatter.format(total); }
 
         document.addEventListener('DOMContentLoaded', () => { updateCartBadge(); initSlider(); });
-      \`}} />
+      ` }} />
     </div>
   , { title: 'Promo & Gift Voucher - Kedai Pangsit Kembar 88' })
 })
