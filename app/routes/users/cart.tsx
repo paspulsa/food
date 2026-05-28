@@ -95,7 +95,8 @@ export default createRoute(async (c) => {
                Makin Hemat Pakai Kupon
              </h3>
              <div class="flex gap-2">
-                <input type="text" id="coupon-input" class="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 text-sm text-gray-900 dark:text-white uppercase focus:outline-none focus:border-[#ee4d2d]" placeholder="Masukkan kode promo">
+                {/* PERBAIKAN: Tag <input /> di bawah ini wajib diakhiri dengan /> dalam TSX/JSX */}
+                <input type="text" id="coupon-input" class="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 text-sm text-gray-900 dark:text-white uppercase focus:outline-none focus:border-[#ee4d2d]" placeholder="Masukkan kode promo" />
                 <button onclick="applyCoupon()" id="btn-apply-coupon" class="bg-gray-800 dark:bg-gray-700 text-white font-bold px-5 rounded-xl shadow-sm hover:bg-gray-900 transition-colors">Pakai</button>
              </div>
              <p id="coupon-message" class="text-[11px] font-bold mt-2 hidden"></p>
@@ -390,9 +391,57 @@ export default createRoute(async (c) => {
           document.getElementById('checkout-btn-price').innerText = formatter.format(grandTotal);
         }
 
-        function processCheckout() {
-           // Pastikan variabel discountPointValue, appliedCouponCode, discountCouponValue, dan tagihan tercatat dikirim melalui API ke orders.ts untuk direkam di order_history.
-           alert('Checkout Berhasil! Menggunakan Point: Rp ' + discountPointValue + ' dan Kupon: ' + (appliedCouponCode || '-'));
+        async function processCheckout() {
+           const btn = document.querySelector('button[onclick="processCheckout()"]');
+           const originalHtml = btn.innerHTML;
+           btn.innerHTML = '<span class="text-sm">Memproses...</span>';
+           btn.disabled = true;
+
+           const address = document.getElementById('cart-address-display').innerText;
+           const notes = document.getElementById('order-notes').value;
+           
+           const payload = {
+             cart: cart.map(item => ({
+               id: item.id,
+               qty: item.qty,
+               additional_price: item.additional_price || 0,
+               note: item.note || ''
+             })),
+             coupon_code: appliedCouponCode || null,
+             address: address,
+             notes: notes
+           };
+
+           try {
+             // Pastikan user sudah login (token akan otomatis terkirim via cookie)
+             const res = await fetch('/api/v1/protected/user/orders/checkout', {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify(payload)
+             });
+             
+             const data = await res.json();
+             
+             if (data.success) {
+               // Hapus isi keranjang di localStorage karena sudah masuk pesanan
+               localStorage.removeItem('spos_cart');
+               showToast('Pesanan berhasil dibuat! Mengalihkan ke pembayaran...');
+               
+               // Alihkan ke halaman pelacakan pesanan/pembayaran QRIS
+               setTimeout(() => {
+                 window.location.href = '/users/orders/' + data.data.order_id;
+               }, 1500);
+             } else {
+               showToast(data.message || 'Gagal membuat pesanan.', true);
+               // Jika unauthorized, arahkan ke login
+               if (res.status === 401) setTimeout(() => window.location.href = '/users/login', 1500);
+             }
+           } catch (error) {
+             showToast('Terjadi kesalahan jaringan.', true);
+           } finally {
+             btn.innerHTML = originalHtml;
+             btn.disabled = false;
+           }
         }
 
         document.addEventListener('DOMContentLoaded', () => {
