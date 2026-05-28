@@ -267,3 +267,39 @@ orderRouter.post('/checkout-voucher', async (c) => {
     return c.json({ success: false, message: e.message }, 500);
   }
 });
+
+// ==========================================
+// ENDPOINT ADMIN: UBAH STATUS PESANAN
+// ==========================================
+orderRouter.put('/:id/status', async (c) => {
+  const db = c.env.DB;
+  const orderId = c.req.param('id');
+  const body = await c.req.json();
+  
+  // Pastikan yang mengakses adalah ADMIN
+  const user = c.get('jwtPayload');
+  if (!user || user.role !== 'ADMIN') {
+      return c.json({ success: false, message: 'Akses Ditolak. Khusus Admin.' }, 403);
+  }
+
+  if (!body.status) return c.json({ success: false, message: 'Status tidak boleh kosong.' }, 400);
+
+  try {
+    const validStatuses = ['PENDING', 'PREPARING', 'DELIVERING', 'COMPLETED', 'CANCELLED'];
+    if (!validStatuses.includes(body.status)) {
+        return c.json({ success: false, message: 'Status tidak valid.' }, 400);
+    }
+
+    const { success } = await db.prepare(
+      `UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).bind(body.status, orderId).run();
+
+    if (success) {
+        return c.json({ success: true, message: `Status pesanan ${orderId} berhasil diubah menjadi ${body.status}` });
+    } else {
+        return c.json({ success: false, message: 'Pesanan tidak ditemukan atau gagal diupdate.' }, 404);
+    }
+  } catch (e: any) {
+    return c.json({ success: false, message: e.message }, 500);
+  }
+});
