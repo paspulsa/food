@@ -72,17 +72,37 @@ orderRouter.post('/checkout', async (c) => {
       return c.json({ success: false, message: 'Sistem pembayaran sedang tidak tersedia.' }, 500);
     }
 
-    // 1. Kalkulasi Subtotal dari Database 
+    // 1. Kalkulasi Subtotal dari Database & Cari Restaurant ID
     let subtotal = 0;
+    let targetRestaurantId = '';
+
     for (const item of body.cart) {
-      const dbItem: any = await db.prepare('SELECT price, promo_price, is_promo FROM menu_items WHERE id = ?').bind(item.id).first();
+      // Join ke menu_categories untuk mendapatkan restaurant_id
+      const dbItem: any = await db.prepare(`
+        SELECT m.price, m.promo_price, m.is_promo, c.restaurant_id 
+        FROM menu_items m 
+        JOIN menu_categories c ON m.category_id = c.id 
+        WHERE m.id = ?
+      `).bind(item.id).first();
+      
       if (dbItem) {
         const itemPrice = dbItem.is_promo === 1 ? dbItem.promo_price : dbItem.price;
         subtotal += (itemPrice + (item.additional_price || 0)) * item.qty;
+        
+        // Ambil ID restoran dari item pertama yang valid
+        if (!targetRestaurantId) {
+          targetRestaurantId = dbItem.restaurant_id;
+        }
       }
     }
 
-    // 2. Baca Ongkir dari Body Frontend (Jika null/tidak valid, fallback ke default backend)
+    // Fallback jika restaurant_id gagal ditarik
+    if (!targetRestaurantId) {
+      const fallbackResto: any = await db.prepare('SELECT id FROM restaurants LIMIT 1').first();
+      targetRestaurantId = fallbackResto ? fallbackResto.id : 'default-resto';
+    }
+
+    // 2. Baca Ongkir dari Body Frontend
     let deliveryFee = typeof body.ongkir === 'number' ? body.ongkir : 10000;
     
     // BIAYA PENGEMASAN & LAYANAN DIHAPUS 100% SESUAI PERMINTAAN
@@ -153,16 +173,47 @@ orderRouter.post('/checkout', async (c) => {
     }
 
     const orderId = 'ORD-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000);
+    
+    // Gabungkan Catatan (Notes) ke dalam Alamat karena tabel asli tidak punya kolom notes
+    const finalAddress = body.notes ? `${body.address} (Catatan: ${body.notes})` : body.address;
+    const orderStatus = finalAmount <= 0 ? 'PROCESSING' : 'PENDING';
+    const paymentMethod = finalAmount <= 0 ? 'POINT/COUPON' : 'QRIS';
 
     // ==========================================
-    // SKENARIO LUNAS (Tagihan 0)
+    // 5. INSERT KE TABEL ORDERS & ORDER_DETAILS
+    // ==========================================
+    await db.prepare(
+      `INSERT INTO orders (id, user_id, restaurant_id, total_price, status, address, order_type, payment_method, points_used, coupon_code, coupon_discount) 
+       VALUES (?, ?, ?, ?, ?, ?, 'DELIVERY', ?, ?, ?, ?)`
+    ).bind(
+      orderId, 
+      user.id, 
+      targetRestaurantId, 
+      baseTotal, 
+      orderStatus, 
+      finalAddress, 
+      paymentMethod,
+      pointsUsed, 
+      body.coupon_code || null, 
+      appliedCouponDiscount
+    ).run();
+
+    // Insert rincian pesanan ke tabel order_details
+    for (const item of body.cart) {
+      const odId = crypto.randomUUID();
+      const dbItem: any = await db.prepare('SELECT price, promo_price, is_promo FROM menu_items WHERE id = ?').bind(item.id).first();
+      const itemPrice = dbItem ? (dbItem.is_promo === 1 ? dbItem.promo_price : dbItem.price) : 0;
+      const finalItemPrice = itemPrice + (item.additional_price || 0);
+      
+      await db.prepare(
+        'INSERT INTO order_details (id, order_id, menu_item_id, quantity, price) VALUES (?, ?, ?, ?, ?)'
+      ).bind(odId, orderId, item.id, item.qty, finalItemPrice).run();
+    }
+
+    // ==========================================
+    // 6. SKENARIO LUNAS (Tagihan 0)
     // ==========================================
     if (finalAmount <= 0) {
-        await db.prepare(
-          `INSERT INTO orders (id, user_id, status, total_amount, points_used, coupon_code, coupon_discount, delivery_address, notes) 
-           VALUES (?, ?, 'PROCESSING', ?, ?, ?, ?, ?, ?)`
-        ).bind(orderId, user.id, baseTotal, pointsUsed, body.coupon_code || null, appliedCouponDiscount, body.address, body.notes).run();
-
         const netPointsChange = excessCouponValue - pointsUsed;
         if (netPointsChange !== 0) {
             await db.prepare(`
@@ -175,13 +226,8 @@ orderRouter.post('/checkout', async (c) => {
     }
 
     // ==========================================
-    // SKENARIO QRIS BAYAR NORMAL
+    // 7. SKENARIO QRIS BAYAR NORMAL
     // ==========================================
-    await db.prepare(
-      `INSERT INTO orders (id, user_id, status, total_amount, points_used, coupon_code, coupon_discount, delivery_address, notes) 
-       VALUES (?, ?, 'PENDING', ?, ?, ?, ?, ?, ?)`
-    ).bind(orderId, user.id, baseTotal, pointsUsed, body.coupon_code || null, appliedCouponDiscount, body.address, body.notes).run();
-
     if (excessCouponValue > 0) {
         await db.prepare(`
             INSERT INTO points (user_id, balance) VALUES (?, ?)
