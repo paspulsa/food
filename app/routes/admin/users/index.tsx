@@ -33,9 +33,9 @@ export default createRoute(async (c) => {
     return acc;
   }, {});
 
-  // Ambil data riwayat transaksi (orders)
+  // Ambil data riwayat transaksi (orders) -> DIPERBAIKI: Menggunakan total_price sesuai skema tabel
   const { results: orders } = await db.prepare(
-    'SELECT id, user_id, status, total_amount, points_used, coupon_discount, created_at FROM orders ORDER BY created_at DESC'
+    'SELECT id, user_id, status, total_price, points_used, coupon_discount, created_at FROM orders ORDER BY created_at DESC'
   ).all();
   
   const ordersMap = orders.reduce((acc: any, o: any) => {
@@ -49,7 +49,8 @@ export default createRoute(async (c) => {
     ...u,
     points: pointsMap[u.id] || 0,
     orders: ordersMap[u.id] || [],
-    total_spent: (ordersMap[u.id] || []).filter((o:any) => o.status === 'COMPLETED' || o.status === 'PROCESSING' || o.status === 'PAID').reduce((sum:number, o:any) => sum + o.total_amount, 0)
+    // DIPERBAIKI: Menggunakan o.total_price dari kueri di atas
+    total_spent: (ordersMap[u.id] || []).filter((o:any) => o.status === 'COMPLETED' || o.status === 'PROCESSING' || o.status === 'PAID').reduce((sum:number, o:any) => sum + o.total_price, 0)
   }));
 
   const safeUsersJson = JSON.stringify(usersData).replace(/</g, '\\u003c');
@@ -244,7 +245,7 @@ export default createRoute(async (c) => {
           roleBadge.innerText = user.role;
           roleBadge.className = \`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold mt-1 border \${user.role === 'ADMIN' ? 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-gray-700 dark:text-gray-300'}\`;
 
-          // Render Tabel Riwayat Kanan
+          // Render Tabel Riwayat Kanan (DIPERBAIKI: Menggunakan o.total_price dari database orders)
           const tbody = document.getElementById('m-history');
           if (user.orders.length === 0) {
              tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-10 text-center text-gray-400 italic">Belum pernah melakukan transaksi.</td></tr>';
@@ -264,7 +265,7 @@ export default createRoute(async (c) => {
                    <td class="px-4 py-3 text-xs text-gray-500 dark:text-gray-400">\${new Date(o.created_at).toLocaleString('id-ID')}</td>
                    <td class="px-4 py-3 font-mono text-xs font-bold text-gray-700 dark:text-gray-300">\${o.id}</td>
                    <td class="px-4 py-3">\${usedInfo || '-'}</td>
-                   <td class="px-4 py-3 text-right font-black text-gray-900 dark:text-white">\${formatter.format(o.total_amount)}</td>
+                   <td class="px-4 py-3 text-right font-black text-gray-900 dark:text-white">\${formatter.format(o.total_price)}</td>
                    <td class="px-4 py-3 text-center">
                      <span class="px-2 py-1 text-[9px] font-bold rounded uppercase \${statusClass}">\${o.status}</span>
                    </td>
