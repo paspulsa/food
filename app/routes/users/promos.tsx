@@ -34,6 +34,7 @@ export default createRoute(async (c) => {
           .hide-scrollbar::-webkit-scrollbar { display: none; }
           .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
           .pb-safe { padding-bottom: env(safe-area-inset-bottom, 20px); }
+          /* Kustomisasi Akordeon/Spoiler */
           details > summary { list-style: none; }
           details > summary::-webkit-details-marker { display: none; }
         `
@@ -52,15 +53,24 @@ export default createRoute(async (c) => {
           </h1>
         </div>
 
-        {/* BANNER PROMO */}
+        {/* HERO BANNER SLIDER */}
         {appPromos.length > 0 && (
           <div class="px-4 mt-5">
-            <div class="flex flex-col gap-4">
-              {appPromos.map((promo: any) => (
-                <a href={promo.action_url || '#'} class="block transform hover:scale-[1.02] transition-transform shadow-sm rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-700">
-                  <img src={promo.image} class="w-full h-40 object-cover bg-gray-200 dark:bg-gray-700" alt="Promo" />
+            <div class="relative w-full h-40 rounded-2xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-700 bg-gray-200 dark:bg-gray-700 group">
+              {appPromos.map((promo: any, index: number) => (
+                <a href={promo.action_url || '#'} class={`absolute inset-0 w-full h-full transition-opacity duration-700 ease-in-out ${index === 0 ? 'opacity-100 z-10' : 'opacity-0 z-0'}`} data-slide={index}>
+                  <img src={promo.image} class="w-full h-full object-cover" alt="Promo Banner" />
                 </a>
               ))}
+              
+              {/* Slider Dots */}
+              {appPromos.length > 1 && (
+                <div class="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5 z-20">
+                  {appPromos.map((_: any, index: number) => (
+                    <span class={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${index === 0 ? 'bg-white scale-125' : 'bg-white/50'}`} data-dot={index}></span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -123,11 +133,51 @@ export default createRoute(async (c) => {
           </div>
         </div>
 
+        {/* =========================================================
+            MODAL BOTTOM SHEET DETAIL PRODUK & KUSTOMISASI (SPOILER)
+            ========================================================= */}
+        <div id="product-detail-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] hidden flex flex-col justify-end opacity-0 transition-opacity duration-300">
+          <div class="bg-white dark:bg-gray-800 w-full max-w-md mx-auto rounded-t-3xl max-h-[85vh] flex flex-col transform translate-y-full transition-transform duration-300 mb-[60px]" id="pdm-inner">
+            
+            <div class="relative h-56 bg-gray-100 dark:bg-gray-700 rounded-t-3xl flex-shrink-0">
+              <img id="pdm-image" src="" class="w-full h-full object-cover rounded-t-3xl" />
+              <button onclick="closeProductDetail()" class="absolute top-4 right-4 w-8 h-8 bg-black/40 text-white rounded-full flex items-center justify-center backdrop-blur-md hover:bg-black/60 transition-colors shadow-sm">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
+            </div>
+
+            <div class="p-5 overflow-y-auto flex-1 hide-scrollbar pb-6">
+              <h2 id="pdm-name" class="text-xl font-black text-gray-900 dark:text-white leading-tight"></h2>
+              <p id="pdm-desc" class="text-sm text-gray-500 dark:text-gray-400 mt-2 leading-relaxed"></p>
+              <div class="mt-3 flex items-center gap-2">
+                 <span id="pdm-price" class="text-lg font-black text-[#ee4d2d]"></span>
+                 <span id="pdm-original-price" class="text-xs font-bold text-gray-400 dark:text-gray-500 line-through hidden"></span>
+              </div>
+              
+              {/* Tempat Injeksi Opsi Custom HTML (SPOILER / ACCORDION) */}
+              <div id="pdm-custom-container" class="mt-6 space-y-3"></div>
+            </div>
+
+            <div class="p-3 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 flex items-center gap-3 flex-shrink-0 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]">
+              <div class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg px-1 border border-gray-200 dark:border-gray-600">
+                <button onclick="updateQty(-1)" class="w-8 h-8 flex items-center justify-center text-gray-600 dark:text-gray-300 font-bold text-lg hover:bg-gray-200 dark:hover:bg-gray-600 rounded-l-lg transition">-</button>
+                <span id="pdm-qty" class="w-6 text-center font-bold text-sm text-gray-900 dark:text-white">1</span>
+                <button onclick="updateQty(1)" class="w-8 h-8 flex items-center justify-center text-[#ee4d2d] font-bold text-lg hover:bg-gray-200 dark:hover:bg-gray-600 rounded-r-lg transition">+</button>
+              </div>
+              <button id="pdm-add-btn" class="flex-1 bg-[#ee4d2d] text-white py-2.5 px-3 rounded-lg text-sm font-bold shadow-sm shadow-[#ee4d2d]/30 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5" onclick="submitProductToCart()">
+                <span>Tambah</span>
+                <span class="w-1 h-1 rounded-full bg-white/50"></span>
+                <span id="pdm-total-btn-price"></span>
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* BOTTOM NAVIGATION BAR (FIXED) */}
         <div class="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.08)] z-[40]">
           <div class="flex justify-around items-center h-[60px] px-2 pb-safe">
             <a href="/users" class="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 hover:text-[#ee4d2d] transition-colors">
-              <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg>
+              <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path></svg>
               <span class="text-[10px] font-semibold">Home</span>
             </a>
             <a href="/users/promos" class="flex flex-col items-center gap-1 text-[#ee4d2d]">
@@ -140,7 +190,7 @@ export default createRoute(async (c) => {
               <span class="text-[10px] font-semibold">Keranjang</span>
             </a>
             <a href="/users/orders" class="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 hover:text-[#ee4d2d] transition-colors">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
               <span class="text-[10px] font-semibold">Order</span>
             </a>
             <a href="/users/login" class="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 hover:text-[#ee4d2d] transition-colors">
@@ -150,52 +200,43 @@ export default createRoute(async (c) => {
           </div>
         </div>
 
-        {/* MODAL BOTTOM SHEET DETAIL PRODUK & KUSTOMISASI (SPOILER) */}
-        <div id="product-detail-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] hidden flex flex-col justify-end opacity-0 transition-opacity duration-300">
-          <div class="bg-white dark:bg-gray-800 w-full max-w-md mx-auto rounded-t-3xl max-h-[85vh] flex flex-col transform translate-y-full transition-transform duration-300" id="pdm-inner">
-            <div class="relative h-56 bg-gray-100 dark:bg-gray-700 rounded-t-3xl flex-shrink-0">
-              <img id="pdm-image" src="" class="w-full h-full object-cover rounded-t-3xl" />
-              <button onclick="closeProductDetail()" class="absolute top-4 right-4 w-8 h-8 bg-black/40 text-white rounded-full flex items-center justify-center backdrop-blur-md hover:bg-black/60 transition-colors shadow-sm">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
-              </button>
-            </div>
-            <div class="p-5 overflow-y-auto flex-1 hide-scrollbar pb-6">
-              <h2 id="pdm-name" class="text-xl font-black text-gray-900 dark:text-white leading-tight"></h2>
-              <p id="pdm-desc" class="text-sm text-gray-500 dark:text-gray-400 mt-2 leading-relaxed"></p>
-              <div class="mt-3 flex items-center gap-2">
-                 <span id="pdm-price" class="text-lg font-black text-[#ee4d2d]"></span>
-                 <span id="pdm-original-price" class="text-xs font-bold text-gray-400 dark:text-gray-500 line-through hidden"></span>
-              </div>
-              <div id="pdm-custom-container" class="mt-6 space-y-3"></div>
-            </div>
-            <div class="p-4 border-t border-gray-100 dark:border-gray-700 bg-white dark:bg-gray-800 flex items-center gap-4 flex-shrink-0 pb-safe shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]">
-              <div class="flex items-center bg-gray-100 dark:bg-gray-700 rounded-xl px-1 border border-gray-200 dark:border-gray-600">
-                <button onclick="updateQty(-1)" class="w-10 h-10 flex items-center justify-center text-gray-600 dark:text-gray-300 font-black text-xl hover:bg-gray-200 dark:hover:bg-gray-600 rounded-l-xl transition">-</button>
-                <span id="pdm-qty" class="w-6 text-center font-black text-gray-900 dark:text-white">1</span>
-                <button onclick="updateQty(1)" class="w-10 h-10 flex items-center justify-center text-[#ee4d2d] font-black text-xl hover:bg-gray-200 dark:hover:bg-gray-600 rounded-r-xl transition">+</button>
-              </div>
-              <button id="pdm-add-btn" class="flex-1 bg-[#ee4d2d] text-white py-3.5 rounded-xl font-bold shadow-md shadow-[#ee4d2d]/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2" onclick="submitProductToCart()">
-                <span>Tambah</span>
-                <span class="w-1 h-1 rounded-full bg-white/50"></span>
-                <span id="pdm-total-btn-price"></span>
-              </button>
-            </div>
-          </div>
-        </div>
-
       </div>
 
       <script dangerouslySetInnerHTML={{ __html: `
         const PRODUCTS = ${safeItemsJson};
         const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
         
-        let cartTotal = 0;
-        let cartItems = 0;
+        // MANAJEMEN KERANJANG REAL (SINKRON DENGAN LOCALSTORAGE)
+        let cart = JSON.parse(localStorage.getItem('spos_cart')) || [];
+        
         let currentActiveProduct = null;
         let currentQty = 1;
         let basePrice = 0;
         let additionalPrice = 0;
 
+        // --- INIT HERO SLIDER ---
+        function initSlider() {
+          let currentSlide = 0;
+          const slides = document.querySelectorAll('[data-slide]');
+          const dots = document.querySelectorAll('[data-dot]');
+          if(slides.length > 1) {
+            setInterval(() => {
+              slides[currentSlide].classList.remove('opacity-100', 'z-10');
+              slides[currentSlide].classList.add('opacity-0', 'z-0');
+              dots[currentSlide].classList.remove('bg-white', 'scale-125');
+              dots[currentSlide].classList.add('bg-white/50');
+              
+              currentSlide = (currentSlide + 1) % slides.length;
+              
+              slides[currentSlide].classList.remove('opacity-0', 'z-0');
+              slides[currentSlide].classList.add('opacity-100', 'z-10');
+              dots[currentSlide].classList.remove('bg-white/50');
+              dots[currentSlide].classList.add('bg-white', 'scale-125');
+            }, 3500); // Ganti gambar setiap 3.5 detik
+          }
+        }
+
+        // --- TOAST NOTIFIKASI ---
         function showToast(msg, isError = false) {
           const toast = document.createElement('div');
           toast.className = \`fixed bottom-24 left-1/2 transform -translate-x-1/2 backdrop-blur-md text-white text-[11px] font-bold px-5 py-3 rounded-full shadow-2xl z-[150] flex items-center gap-2 transition-all duration-300 opacity-0 translate-y-4 border \${isError ? 'bg-red-600/95 border-red-500' : 'bg-gray-900/95 border-gray-800'}\`;
@@ -207,19 +248,80 @@ export default createRoute(async (c) => {
           setTimeout(() => { toast.classList.add('opacity-0', 'translate-y-4'); setTimeout(() => toast.remove(), 300); }, 2500);
         }
 
-        // --- MANAJEMEN KERANJANG SEMENTARA ---
-        function addToCart(id, name, price) {
-          cartItems += 1;
-          cartTotal += price;
-          const badge = document.getElementById('nav-cart-badge');
-          badge.innerText = cartItems;
-          badge.classList.remove('hidden');
-          badge.style.transform = 'scale(1.4)';
-          setTimeout(() => badge.style.transform = 'scale(1)', 200);
-          showToast(name + ' ditambahkan!');
+        // --- UPDATE BADGE ---
+        function saveCart() {
+          localStorage.setItem('spos_cart', JSON.stringify(cart));
+          updateCartBadge();
         }
 
-        // --- MODAL PRODUK & JSON ---
+        function updateCartBadge() {
+          let totalItems = 0;
+          cart.forEach(item => { totalItems += item.qty; });
+          const badge = document.getElementById('nav-cart-badge');
+          if (badge) {
+            if (totalItems > 0) {
+              badge.innerText = totalItems;
+              badge.classList.remove('hidden');
+              badge.style.transform = 'scale(1.4)';
+              setTimeout(() => badge.style.transform = 'scale(1)', 200);
+            } else {
+              badge.classList.add('hidden');
+            }
+          }
+        }
+
+        // --- KERANJANG LANGSUNG ---
+        function addToCart(id, name, price) {
+          const product = PRODUCTS.find(p => p.id === id);
+          if (!product) return;
+
+          const existingIndex = cart.findIndex(item => item.id === id && !item.note);
+          if (existingIndex > -1) {
+              cart[existingIndex].qty += 1;
+          } else {
+              cart.push({
+                  id: id,
+                  name: name,
+                  price: price,
+                  image: product.image || 'https://via.placeholder.com/150',
+                  qty: 1,
+                  additional_price: 0,
+                  note: ''
+              });
+          }
+          saveCart();
+          showToast(name + ' ditambahkan ke pesanan!');
+        }
+
+        // --- MODAL KERANJANG CUSTOM ---
+        function submitProductToCart() {
+           let noteArr = [];
+           const inputs = document.querySelectorAll('#pdm-custom-container input:checked');
+           inputs.forEach(input => { 
+               const labelSpan = input.nextElementSibling;
+               if(labelSpan) noteArr.push(labelSpan.innerText);
+           });
+           const noteStr = noteArr.join(', ');
+
+           const existingIndex = cart.findIndex(item => item.id === currentActiveProduct.id && item.note === noteStr);
+           if (existingIndex > -1) {
+               cart[existingIndex].qty += currentQty;
+           } else {
+               cart.push({
+                   id: currentActiveProduct.id,
+                   name: currentActiveProduct.name,
+                   price: basePrice,
+                   image: currentActiveProduct.image || 'https://via.placeholder.com/150',
+                   qty: currentQty,
+                   additional_price: additionalPrice,
+                   note: noteStr
+               });
+           }
+           saveCart();
+           showToast(currentActiveProduct.name + ' ditambahkan ke pesanan!');
+           closeProductDetail();
+        }
+
         function openProductDetail(id) {
           const item = PRODUCTS.find(p => p.id === id);
           if(!item) return;
@@ -227,6 +329,7 @@ export default createRoute(async (c) => {
           currentActiveProduct = item;
           currentQty = 1;
           document.getElementById('pdm-qty').innerText = currentQty;
+
           document.getElementById('pdm-image').src = item.image || 'https://via.placeholder.com/400';
           document.getElementById('pdm-name').innerText = item.name;
           document.getElementById('pdm-desc').innerText = item.description || '';
@@ -238,16 +341,19 @@ export default createRoute(async (c) => {
           if(item.is_promo === 1) {
              orig.innerText = formatter.format(item.price);
              orig.classList.remove('hidden');
-          } else { orig.classList.add('hidden'); }
+          } else {
+             orig.classList.add('hidden');
+          }
 
           const container = document.getElementById('pdm-custom-container');
           container.innerHTML = '';
           additionalPrice = 0;
 
           if(item.is_custom === 1 && item.custom_options) {
-             try {
-                const options = JSON.parse(item.custom_options);
-                options.forEach((optGroup, groupIdx) => {
+           try {
+              const parsedData = JSON.parse(item.custom_options);     
+              const options = Array.isArray(parsedData) ? parsedData : (parsedData.builder || []);
+                  options.forEach((optGroup, groupIdx) => {
                    let html = \`
                      <details class="group border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-800 transition-all duration-300 shadow-sm" open>
                        <summary class="flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-700/50 cursor-pointer select-none outline-none">
@@ -255,15 +361,17 @@ export default createRoute(async (c) => {
                            <h4 class="font-black text-gray-900 dark:text-white text-sm">\${optGroup.title || optGroup.name}</h4>
                            \${optGroup.is_required || optGroup.required ? '<span class="text-[9px] font-bold bg-orange-100 dark:bg-[#ee4d2d]/20 text-[#ee4d2d] px-1.5 py-0.5 rounded">Wajib</span>' : '<span class="text-[9px] font-medium text-gray-500 dark:text-gray-400">Opsional</span>'}
                          </div>
-                         <svg class="w-5 h-5 text-gray-400 dark:text-gray-500 transform group-open:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7-7-7-7"></path></svg>
+                         <svg class="w-5 h-5 text-gray-400 dark:text-gray-500 transform group-open:rotate-180 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                        </summary>
                        <div class="p-3 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700">
                    \`;
+
                    const choices = optGroup.choices || optGroup.options || [];
                    choices.forEach((opt, optIdx) => {
                      const inputType = optGroup.type === 'radio' ? 'radio' : 'checkbox';
                      const inputName = \`custom_\${groupIdx}\`;
                      const priceText = opt.price > 0 ? \`+ \${formatter.format(opt.price)}\` : 'Gratis';
+                     
                      html += \`
                        <label class="flex items-center justify-between py-3 px-2 border-b border-gray-50 dark:border-gray-700/50 last:border-0 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors rounded-lg">
                          <div class="flex items-center gap-3">
@@ -277,14 +385,19 @@ export default createRoute(async (c) => {
                    html += '</div></details>';
                    container.innerHTML += html;
                 });
-             } catch(e) { console.error("Gagal parsing JSON", e); }
+             } catch(e) { console.error("Gagal parsing custom JSON", e); }
           }
+
           recalculateModalPrice();
+
           const modal = document.getElementById('product-detail-modal');
           const inner = document.getElementById('pdm-inner');
           modal.classList.remove('hidden');
           modal.classList.add('flex');
-          setTimeout(() => { modal.classList.remove('opacity-0'); inner.classList.remove('translate-y-full'); }, 10);
+          setTimeout(() => {
+            modal.classList.remove('opacity-0');
+            inner.classList.remove('translate-y-full');
+          }, 10);
         }
 
         function closeProductDetail() {
@@ -305,26 +418,18 @@ export default createRoute(async (c) => {
 
         function recalculateModalPrice() {
            additionalPrice = 0;
-           document.querySelectorAll('#pdm-custom-container input:checked').forEach(input => { additionalPrice += parseInt(input.value) || 0; });
+           const inputs = document.querySelectorAll('#pdm-custom-container input:checked');
+           inputs.forEach(input => { additionalPrice += parseInt(input.value) || 0; });
            const total = (basePrice + additionalPrice) * currentQty;
            document.getElementById('pdm-total-btn-price').innerText = formatter.format(total);
         }
 
-        function submitProductToCart() {
-           const finalPrice = (basePrice + additionalPrice) * currentQty;
-           for(let i=0; i < currentQty; i++){
-              cartItems += 1;
-              cartTotal += (basePrice + additionalPrice);
-           }
-           const badge = document.getElementById('nav-cart-badge');
-           badge.innerText = cartItems;
-           badge.classList.remove('hidden');
-           badge.style.transform = 'scale(1.4)';
-           setTimeout(() => badge.style.transform = 'scale(1)', 200);
-           showToast(currentActiveProduct.name + ' ditambahkan ke pesanan!');
-           closeProductDetail();
-        }
+        // --- INIT SAAT HALAMAN DIMUAT ---
+        document.addEventListener('DOMContentLoaded', () => {
+          updateCartBadge();
+          initSlider();
+        });
       `}} />
     </div>
-  , { title: 'Promo Spesial - ShopeeFood Clone' })
+  , { title: 'Promo Spesial - Kedai Pangsit Kembar 88' })
 })
