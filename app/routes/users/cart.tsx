@@ -34,7 +34,7 @@ export default createRoute(async (c) => {
 
   // Tarik Pengaturan Ongkos Kirim & Lokasi Resto
   const deliverySettings = await c.env.DB.prepare('SELECT * FROM delivery_settings LIMIT 1').first<any>() || {
-    free_range_max: 2, mid_range_max: 3, mid_range_price: 8000, max_range_price: 10000, max_radius_limit: 5, resto_lat: -6.2088, resto_lng: 106.8456
+    free_range_max: 2, mid_range_max: 3, mid_range_price: 8000, max_range_price: 10000, max_radius_limit: 5, resto_lat: -6.8183497, resto_lng: 107.2972743
   };
 
   const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
@@ -120,7 +120,6 @@ export default createRoute(async (c) => {
                 <span id="summary-subtotal" class="font-bold text-gray-900 dark:text-white">Rp 0</span>
               </div>
               
-              {/* ONGKOS KIRIM */}
               <div class="flex justify-between border-b border-dashed border-gray-200 dark:border-gray-600 pb-3">
                 <span id="summary-ongkir-label">Ongkos Kirim (Sedang dihitung)</span>
                 <span id="summary-ongkir" class="font-bold text-gray-900 dark:text-white">Rp 0</span>
@@ -179,14 +178,13 @@ export default createRoute(async (c) => {
 
       </div>
 
-      {/* SCRIPT LOGIKA KUPON, GPS ONGKIR, & POINT KERANJANG */}
+      {/* SCRIPT LOGIKA KUPON, GPS ONGKIR, POINT KERANJANG, & CHECKOUT 401 */}
       <script dangerouslySetInnerHTML={{ __html: `
         const DB_ADDRESS = \`${userAddress}\`;
         const DB_POINTS = ${userPoints};
         const deliverySettings = ${JSON.stringify(deliverySettings)};
         const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
         
-        // Asumsi Biaya Statis jika tidak ada GPS
         let calculatedOngkir = 10000;
         let isOutOfRange = false;
         let userLat = 0, userLng = 0;
@@ -207,7 +205,7 @@ export default createRoute(async (c) => {
           setTimeout(() => { toast.classList.add('opacity-0', 'translate-y-4'); setTimeout(() => toast.remove(), 300); }, 2500);
         }
 
-        // --- MENGHITUNG ONGKIR DENGAN HAVERSINE BERDASARKAN DB ---
+        // --- HAVERSINE LOKASI ---
         function calculateDistance(lat1, lon1, lat2, lon2) {
           const R = 6371; 
           const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -239,10 +237,18 @@ export default createRoute(async (c) => {
                 try {
                   const res = await fetch(\`https://nominatim.openstreetmap.org/reverse?format=json&lat=\${userLat}&lon=\${userLng}&zoom=16\`);
                   const data = await res.json();
-                  let streetName = data.address.road || data.display_name.split(',')[0];
+                  
+                  let streetName = "Lokasi Tidak Diketahui";
+                  if (data && data.address) {
+                     streetName = data.address.road || data.address.town || data.address.village || data.address.suburb || data.display_name.split(',')[0];
+                  }
+                  
                   document.getElementById('cart-address-display').innerText = streetName;
                   
-                  const dist = calculateDistance(deliverySettings.resto_lat, deliverySettings.resto_lng, userLat, userLng);
+                  const restoLat = parseFloat(deliverySettings.resto_lat) || -6.8183497;
+                  const restoLng = parseFloat(deliverySettings.resto_lng) || 107.2972743;
+                  
+                  const dist = calculateDistance(restoLat, restoLng, userLat, userLng);
                   const resultOngkir = determineOngkir(dist);
 
                   if (resultOngkir === 'OUT') {
@@ -291,23 +297,18 @@ export default createRoute(async (c) => {
            btn.innerText = 'Cek...';
 
            try {
-             // Validasi Kupon secara Real-time
              const res = await fetch('/api/v1/public/coupons/validate', {
-               method: 'POST',
-               headers: { 'Content-Type': 'application/json' },
+               method: 'POST', headers: { 'Content-Type': 'application/json' },
                body: JSON.stringify({ code: codeInput, subtotal: calculatedSubtotal })
              });
-             
              const data = await res.json();
              msgBox.classList.remove('hidden');
 
              if(data.success) {
                appliedCouponCode = data.data.code;
                discountCouponValue = data.data.discount_amount;
-               
                msgBox.innerText = '✓ Kupon berhasil dipakai!';
                msgBox.className = "text-[11px] font-bold mt-2 text-green-500 block";
-               
                calculateGrandTotal();
              } else {
                appliedCouponCode = '';
@@ -333,9 +334,7 @@ export default createRoute(async (c) => {
         function clearCart() {
           if(cart.length === 0) return;
           if(confirm('Apakah Anda yakin ingin mengosongkan keranjang?')) {
-            cart = [];
-            appliedCouponCode = '';
-            discountCouponValue = 0;
+            cart = []; appliedCouponCode = ''; discountCouponValue = 0;
             document.getElementById('coupon-input').value = '';
             document.getElementById('coupon-message').classList.add('hidden');
             saveCart();
@@ -344,14 +343,11 @@ export default createRoute(async (c) => {
 
         function updateQty(index, delta) {
           if (cart[index].qty + delta <= 0) {
-            if(confirm('Hapus item ini dari keranjang?')) {
-              cart.splice(index, 1);
-            }
+            if(confirm('Hapus item ini dari keranjang?')) cart.splice(index, 1);
           } else {
             cart[index].qty += delta;
           }
-          appliedCouponCode = '';
-          discountCouponValue = 0;
+          appliedCouponCode = ''; discountCouponValue = 0;
           document.getElementById('coupon-message').classList.add('hidden');
           saveCart();
         }
@@ -460,7 +456,7 @@ export default createRoute(async (c) => {
 
         async function processCheckout() {
            if(isOutOfRange) {
-              showToast('Maaf, lokasi Anda di luar batas maksimal pengiriman kami.', true);
+              showToast('Maaf, lokasi Anda di luar batas pengiriman.', true);
               return;
            }
 
@@ -469,12 +465,19 @@ export default createRoute(async (c) => {
            btn.innerHTML = '<span class="text-sm">Memproses...</span>';
            btn.disabled = true;
 
+           // Helper untuk membaca token JWT dari cookie
            const getCookie = (name) => {
              const value = "; " + document.cookie;
              const parts = value.split("; " + name + "=");
              if (parts.length === 2) return parts.pop().split(";").shift();
            };
            const token = getCookie('token');
+
+           // BLOKIR JIKA TIDAK ADA TOKEN SEBELUM FETCH API
+           if (!token) {
+               window.location.href = '/users/login';
+               return;
+           }
 
            const address = document.getElementById('cart-address-display').innerText;
            const notes = document.getElementById('order-notes').value;
@@ -489,28 +492,29 @@ export default createRoute(async (c) => {
              coupon_code: appliedCouponCode || null,
              address: address,
              notes: notes,
-             ongkir: calculatedOngkir // Payload dikirim utuh ke Backend
+             ongkir: calculatedOngkir
            };
 
            try {
              const res = await fetch('/api/v1/protected/user/orders/checkout', {
                method: 'POST',
-               headers: { 
-                 'Content-Type': 'application/json',
-                 'Authorization': 'Bearer ' + token
-               },
+               headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
                body: JSON.stringify(payload)
              });
              
+             // BLOKIR JIKA SERVER MERESPON 401 UNAUTHORIZED (TOKEN EXPIRED/INVALID)
+             if (res.status === 401) {
+                 window.location.href = '/users/login';
+                 return;
+             }
+
              const data = await res.json();
-             
              if (data.success) {
                localStorage.removeItem('spos_cart');
                showToast('Pesanan berhasil dibuat!');
                setTimeout(() => { window.location.href = '/users/orders/' + data.data.order_id; }, 1500);
              } else {
                showToast(data.message || 'Gagal membuat pesanan.', true);
-               if (res.status === 401) setTimeout(() => window.location.href = '/users/login', 1500);
              }
            } catch (error) {
              showToast('Terjadi kesalahan jaringan.', true);
@@ -520,9 +524,7 @@ export default createRoute(async (c) => {
            }
         }
         
-        document.addEventListener('DOMContentLoaded', () => {
-          renderCart();
-        });
+        document.addEventListener('DOMContentLoaded', () => { renderCart(); });
       `}} />
     </div>
   , { title: 'Keranjang - Kedai Pangsit Kembar 88' })
