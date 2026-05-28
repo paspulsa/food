@@ -7,6 +7,7 @@ export default createRoute(async (c) => {
   let userName = '';
   let userPhone = '';
   let isUserLoggedIn = false;
+  let userPoints = 0;
 
   const token = getCookie(c, 'token');
   
@@ -14,22 +15,25 @@ export default createRoute(async (c) => {
     try {
       const payload = await verify(token, c.env.JWT_SECRET, 'HS256');
       if (payload && payload.id) {
-        const user = await c.env.DB.prepare(
-          'SELECT name, address, phone FROM users WHERE id = ?'
-        ).bind(payload.id).first<any>();
+        // Tarik profil user
+        const user = await c.env.DB.prepare('SELECT name, address, phone FROM users WHERE id = ?').bind(payload.id).first<any>();
+        
+        // Tarik saldo point user (Jika kosong, defaults to 0)
+        const pts = await c.env.DB.prepare('SELECT balance FROM points WHERE user_id = ?').bind(payload.id).first<any>();
         
         if (user) {
           isUserLoggedIn = true;
           userName = user.name || '';
           userAddress = user.address || '';
           userPhone = user.phone || '';
+          userPoints = pts ? pts.balance : 0;
         }
       }
     } catch (e) {}
   }
 
   return c.render(
-    <div class="bg-gray-100 dark:bg-gray-900 min-h-screen font-sans">
+    <div class="bg-gray-100 dark:bg-gray-900 min-h-screen font-sans pb-28">
       <style dangerouslySetInnerHTML={{
         __html: `
           .hide-scrollbar::-webkit-scrollbar { display: none; }
@@ -38,12 +42,12 @@ export default createRoute(async (c) => {
         `
       }} />
 
-      <div class="max-w-md mx-auto bg-gray-50 dark:bg-gray-800 min-h-screen relative shadow-2xl pb-24 overflow-x-hidden transition-colors duration-300">
+      <div class="max-w-md mx-auto bg-gray-50 dark:bg-gray-800 min-h-screen relative shadow-2xl overflow-x-hidden transition-colors duration-300">
         
         {/* HEADER KERANJANG */}
         <div class="bg-white dark:bg-gray-800 px-4 pt-6 pb-4 shadow-sm sticky top-0 z-30 flex items-center justify-between border-b border-gray-100 dark:border-gray-700">
           <div class="flex items-center gap-3">
-            <a href="/users" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+            <a href="/users" class="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-white hover:bg-gray-200 transition-colors">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7"></path></svg>
             </a>
             <h1 class="text-lg font-black text-gray-900 dark:text-white">Keranjang Saya</h1>
@@ -71,19 +75,30 @@ export default createRoute(async (c) => {
           </div>
         </div>
 
-        {/* LIST ITEM KERANJANG (DI-RENDER OLEH JAVASCRIPT) */}
+        {/* LIST ITEM KERANJANG */}
         <div class="px-4">
           <h3 class="text-sm font-black text-gray-900 dark:text-white mb-3">Pesanan Anda</h3>
-          <div id="cart-items-container" class="space-y-4">
-            {/* Tempat injeksi list keranjang dari LocalStorage */}
-          </div>
+          <div id="cart-items-container" class="space-y-4"></div>
         </div>
 
         {/* BUNGKUSAN CHECKOUT (Akan disembunyikan JS jika keranjang kosong) */}
         <div id="checkout-section">
           {/* CATATAN TAMBAHAN UNTUK RESTO */}
           <div class="px-4 mt-6">
-            <textarea id="order-notes" rows={2} class="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-[#ee4d2d] transition-colors resize-none shadow-sm" placeholder="Ada pesan tambahan untuk restoran? (Cth: Minta banyakin saus, jangan pedas)"></textarea>
+            <textarea id="order-notes" rows={2} class="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 text-xs text-gray-900 dark:text-white focus:outline-none focus:border-[#ee4d2d] transition-colors resize-none shadow-sm" placeholder="Ada pesan tambahan untuk restoran? (Cth: Minta banyakin saus)"></textarea>
+          </div>
+
+          {/* WIDGET KUPON & VOUCHER */}
+          <div class="px-4 mt-6">
+             <h3 class="text-sm font-black text-gray-900 dark:text-white mb-2 flex items-center gap-1.5">
+               <svg class="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"></path></svg>
+               Makin Hemat Pakai Kupon
+             </h3>
+             <div class="flex gap-2">
+                <input type="text" id="coupon-input" class="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 text-sm text-gray-900 dark:text-white uppercase focus:outline-none focus:border-[#ee4d2d]" placeholder="Masukkan kode promo">
+                <button onclick="applyCoupon()" id="btn-apply-coupon" class="bg-gray-800 dark:bg-gray-700 text-white font-bold px-5 rounded-xl shadow-sm hover:bg-gray-900 transition-colors">Pakai</button>
+             </div>
+             <p id="coupon-message" class="text-[11px] font-bold mt-2 hidden"></p>
           </div>
 
           {/* RINGKASAN PEMBAYARAN */}
@@ -91,7 +106,7 @@ export default createRoute(async (c) => {
             <h3 class="text-sm font-black text-gray-900 dark:text-white mb-3">Ringkasan Pembayaran</h3>
             <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-3 text-xs font-medium text-gray-600 dark:text-gray-400">
               <div class="flex justify-between">
-                <span id="summary-item-count">Subtotal Harga (0 Barang)</span>
+                <span id="summary-item-count">Subtotal Harga</span>
                 <span id="summary-subtotal" class="font-bold text-gray-900 dark:text-white">Rp 0</span>
               </div>
               <div class="flex justify-between">
@@ -102,6 +117,17 @@ export default createRoute(async (c) => {
                 <span>Biaya Layanan & Pengemasan</span>
                 <span id="summary-layanan" class="font-bold text-gray-900 dark:text-white">Rp 0</span>
               </div>
+              
+              {/* Tempat Munculnya Potongan Harga (Dinamis dari JS) */}
+              <div id="row-coupon" class="flex justify-between text-green-500 hidden">
+                <span id="coupon-label">Potongan Kupon</span>
+                <span id="summary-coupon" class="font-bold">- Rp 0</span>
+              </div>
+              <div id="row-points" class="flex justify-between text-[#ee4d2d] hidden">
+                <span>Potongan Saldo Poin Cashback</span>
+                <span id="summary-points" class="font-bold">- Rp 0</span>
+              </div>
+
               <div class="flex justify-between pt-1">
                 <span class="font-black text-sm text-gray-900 dark:text-white">Total Pembayaran</span>
                 <span id="summary-grandtotal" class="font-black text-lg text-[#ee4d2d]">Rp 0</span>
@@ -147,17 +173,23 @@ export default createRoute(async (c) => {
 
       </div>
 
-      {/* SCRIPT LOGIKA KERANJANG (CLIENT-SIDE) */}
+      {/* SCRIPT LOGIKA KUPON & POINT KERANJANG */}
       <script dangerouslySetInnerHTML={{ __html: `
         const DB_ADDRESS = \`${userAddress}\`;
+        const DB_POINTS = ${userPoints};
         const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
         
-        // Konstanta Biaya
+        // Asumsi Biaya Statis (Dalam produksi ini ditarik dari delivery API)
         const BIAYA_ONGKIR = 10000;
         const BIAYA_LAYANAN = 3000;
 
-        // Ambil Data Keranjang dari LocalStorage (jika belum ada, array kosong)
         let cart = JSON.parse(localStorage.getItem('spos_cart')) || [];
+        
+        // State Diskon
+        let appliedCouponCode = '';
+        let discountCouponValue = 0;
+        let discountPointValue = 0;
+        let calculatedSubtotal = 0;
 
         function initAddress() {
           if (!DB_ADDRESS) {
@@ -166,6 +198,61 @@ export default createRoute(async (c) => {
               document.getElementById('cart-address-display').innerText = savedAddress;
             }
           }
+        }
+
+        function showToast(msg, isError = false) {
+          const toast = document.createElement('div');
+          toast.className = \`fixed bottom-24 left-1/2 transform -translate-x-1/2 backdrop-blur-md text-white text-[11px] font-bold px-5 py-3 rounded-full shadow-2xl z-[100] flex items-center gap-2 transition-all duration-300 opacity-0 translate-y-4 \${isError ? 'bg-red-600' : 'bg-gray-900'}\`;
+          toast.innerHTML = msg;
+          document.body.appendChild(toast);
+          setTimeout(() => toast.classList.remove('opacity-0', 'translate-y-4'), 10);
+          setTimeout(() => { toast.classList.add('opacity-0', 'translate-y-4'); setTimeout(() => toast.remove(), 300); }, 2500);
+        }
+
+        async function applyCoupon() {
+           const codeInput = document.getElementById('coupon-input').value.trim();
+           const msgBox = document.getElementById('coupon-message');
+           
+           if (!codeInput) return;
+
+           const btn = document.getElementById('btn-apply-coupon');
+           btn.disabled = true;
+           btn.innerText = 'Cek...';
+
+           try {
+             // Validasi Kupon secara Real-time
+             const res = await fetch('/api/v1/public/coupons/validate', {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({ code: codeInput, subtotal: calculatedSubtotal })
+             });
+             
+             const data = await res.json();
+             msgBox.classList.remove('hidden');
+
+             if(data.success) {
+               appliedCouponCode = data.data.code;
+               discountCouponValue = data.data.discount_amount;
+               
+               msgBox.innerText = '✓ Kupon berhasil dipakai!';
+               msgBox.className = "text-[11px] font-bold mt-2 text-green-500 block";
+               
+               // Render ulang total bayar
+               calculateGrandTotal();
+             } else {
+               appliedCouponCode = '';
+               discountCouponValue = 0;
+               msgBox.innerText = '✕ ' + data.message;
+               msgBox.className = "text-[11px] font-bold mt-2 text-red-500 block";
+               calculateGrandTotal();
+             }
+           } catch(e) {
+             msgBox.innerText = 'Gangguan jaringan. Coba lagi.';
+             msgBox.className = "text-[11px] font-bold mt-2 text-red-500 block";
+           } finally {
+             btn.disabled = false;
+             btn.innerText = 'Pakai';
+           }
         }
 
         function saveCart() {
@@ -177,6 +264,10 @@ export default createRoute(async (c) => {
           if(cart.length === 0) return;
           if(confirm('Apakah Anda yakin ingin mengosongkan keranjang?')) {
             cart = [];
+            appliedCouponCode = '';
+            discountCouponValue = 0;
+            document.getElementById('coupon-input').value = '';
+            document.getElementById('coupon-message').classList.add('hidden');
             saveCart();
           }
         }
@@ -189,6 +280,10 @@ export default createRoute(async (c) => {
           } else {
             cart[index].qty += delta;
           }
+          // Reset Kupon untuk menjaga keamanan batas belanja (user harus hit API kupon lagi)
+          appliedCouponCode = '';
+          discountCouponValue = 0;
+          document.getElementById('coupon-message').classList.add('hidden');
           saveCart();
         }
 
@@ -197,7 +292,6 @@ export default createRoute(async (c) => {
           const checkoutSection = document.getElementById('checkout-section');
           const badge = document.getElementById('nav-cart-badge');
 
-          // Jika Keranjang Kosong
           if (cart.length === 0) {
             container.innerHTML = \`
               <div class="text-center py-10 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700">
@@ -212,16 +306,15 @@ export default createRoute(async (c) => {
             return;
           }
 
-          // Jika Keranjang Ada Isinya
           checkoutSection.classList.remove('hidden');
           
           let html = '';
-          let subtotal = 0;
+          calculatedSubtotal = 0;
           let totalItems = 0;
 
           cart.forEach((item, index) => {
             const itemTotal = item.price * item.qty;
-            subtotal += itemTotal;
+            calculatedSubtotal += itemTotal;
             totalItems += item.qty;
 
             html += \`
@@ -246,36 +339,67 @@ export default createRoute(async (c) => {
           });
 
           container.innerHTML = html;
-
-          // Hitung Ringkasan Total Pembayaran
-          const grandTotal = subtotal + BIAYA_ONGKIR + BIAYA_LAYANAN;
-
           document.getElementById('summary-item-count').innerText = \`Subtotal Harga (\${totalItems} Barang)\`;
-          document.getElementById('summary-subtotal').innerText = formatter.format(subtotal);
-          document.getElementById('summary-ongkir').innerText = formatter.format(BIAYA_ONGKIR);
-          document.getElementById('summary-layanan').innerText = formatter.format(BIAYA_LAYANAN);
-          document.getElementById('summary-grandtotal').innerText = formatter.format(grandTotal);
-          document.getElementById('checkout-btn-price').innerText = formatter.format(grandTotal);
-
+          
           if(badge) {
             badge.innerText = totalItems;
             badge.classList.remove('hidden');
           }
+
+          // Segera Kalkulasi Total Biaya & Diskon
+          calculateGrandTotal();
+        }
+
+        function calculateGrandTotal() {
+          document.getElementById('summary-subtotal').innerText = formatter.format(calculatedSubtotal);
+          document.getElementById('summary-ongkir').innerText = formatter.format(BIAYA_ONGKIR);
+          document.getElementById('summary-layanan').innerText = formatter.format(BIAYA_LAYANAN);
+          
+          // Total Awal sebelum didiskon
+          let grandTotal = calculatedSubtotal + BIAYA_ONGKIR + BIAYA_LAYANAN;
+
+          // 1. Eksekusi Pemotongan Kupon (Bisa bayar penuh jika Kupon besar)
+          const rowCoupon = document.getElementById('row-coupon');
+          if (discountCouponValue > 0) {
+             rowCoupon.classList.remove('hidden');
+             document.getElementById('coupon-label').innerText = \`Diskon (\${appliedCouponCode})\`;
+             document.getElementById('summary-coupon').innerText = \`- \${formatter.format(discountCouponValue)}\`;
+             grandTotal -= discountCouponValue;
+          } else {
+             rowCoupon.classList.add('hidden');
+          }
+
+          // 2. Eksekusi Pemotongan Saldo Point Otomatis (Jika sisa Grand Total masih ada)
+          const rowPoints = document.getElementById('row-points');
+          discountPointValue = 0;
+          if (DB_POINTS > 0 && grandTotal > 0) {
+             // Potong point senilai sisa tagihan, tidak boleh melebihi saldo Point
+             discountPointValue = Math.min(DB_POINTS, grandTotal);
+             grandTotal -= discountPointValue;
+             
+             rowPoints.classList.remove('hidden');
+             document.getElementById('summary-points').innerText = \`- \${formatter.format(discountPointValue)}\`;
+          } else {
+             rowPoints.classList.add('hidden');
+          }
+
+          // Hindari tagihan negatif (Minimal Tagihan = Rp 0, alias Full Bayar Kupon/Point)
+          if(grandTotal < 0) grandTotal = 0;
+
+          document.getElementById('summary-grandtotal').innerText = formatter.format(grandTotal);
+          document.getElementById('checkout-btn-price').innerText = formatter.format(grandTotal);
         }
 
         function processCheckout() {
-          // Disini nanti logika untuk menembak API pembuatan Order (POST /api/v1/protected/user/orders)
-          alert('Proses Checkout Berhasil Dijalankan! Melanjutkan ke pembayaran...');
-          // Contoh integrasi ke depan:
-          // fetch('/api/v1/protected/user/orders', { method: 'POST', body: JSON.stringify(...) })
+           // Pastikan variabel discountPointValue, appliedCouponCode, discountCouponValue, dan tagihan tercatat dikirim melalui API ke orders.ts untuk direkam di order_history.
+           alert('Checkout Berhasil! Menggunakan Point: Rp ' + discountPointValue + ' dan Kupon: ' + (appliedCouponCode || '-'));
         }
 
-        // Jalankan Inisialisasi
         document.addEventListener('DOMContentLoaded', () => {
           initAddress();
           renderCart();
         });
       `}} />
     </div>
-  , { title: 'Keranjang Saya - Kedai Pangsit Kembar 88' })
+  , { title: 'Keranjang - Kedai Pangsit Kembar 88' })
 })
