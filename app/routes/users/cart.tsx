@@ -32,6 +32,13 @@ export default createRoute(async (c) => {
     } catch (e) {}
   }
 
+  // Tarik Pengaturan Ongkos Kirim & Lokasi Resto
+  const deliverySettings = await c.env.DB.prepare('SELECT * FROM delivery_settings LIMIT 1').first<any>() || {
+    free_range_max: 2, mid_range_max: 3, mid_range_price: 8000, max_range_price: 10000, max_radius_limit: 5, resto_lat: -6.2088, resto_lng: 106.8456
+  };
+
+  const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
+
   return c.render(
     <div class="bg-gray-100 dark:bg-gray-900 min-h-screen font-sans pb-28">
       <style dangerouslySetInnerHTML={{
@@ -65,12 +72,15 @@ export default createRoute(async (c) => {
             <div class="flex-1">
               <div class="flex justify-between items-center mb-1">
                 <h3 class="text-sm font-black text-gray-900 dark:text-white">Alamat Pengantaran</h3>
-                <a href="/users" class="text-[11px] font-bold text-[#ee4d2d] bg-orange-50 dark:bg-[#ee4d2d]/10 px-2 py-1 rounded hover:bg-orange-100 transition-colors">Ubah</a>
+                <button onclick="detectGPSLocation()" class="text-[11px] font-bold text-[#ee4d2d] bg-orange-50 dark:bg-[#ee4d2d]/10 px-2 py-1 rounded hover:bg-orange-100 transition-colors" id="btn-gps-refresh">Deteksi GPS</button>
               </div>
               <p class="text-xs font-bold text-gray-700 dark:text-gray-300 mb-0.5">{userName || 'Tamu'}</p>
               <p class="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed" id="cart-address-display">
-                {userAddress || 'Mendeteksi lokasi dari sistem Anda...'}
+                {userAddress || 'Ketuk deteksi GPS untuk menghitung ongkir...'}
               </p>
+              <div class="mt-2 text-[10px] font-bold text-orange-500 bg-orange-50 dark:bg-orange-900/30 p-1.5 rounded" id="cart-distance-display">
+                 Status Jarak: Belum Dihitung
+              </div>
             </div>
           </div>
         </div>
@@ -81,7 +91,7 @@ export default createRoute(async (c) => {
           <div id="cart-items-container" class="space-y-4"></div>
         </div>
 
-        {/* BUNGKUSAN CHECKOUT (Akan disembunyikan JS jika keranjang kosong) */}
+        {/* BUNGKUSAN CHECKOUT */}
         <div id="checkout-section">
           {/* CATATAN TAMBAHAN UNTUK RESTO */}
           <div class="px-4 mt-6">
@@ -95,14 +105,13 @@ export default createRoute(async (c) => {
                Makin Hemat Pakai Kupon
              </h3>
              <div class="flex gap-2">
-                {/* PERBAIKAN: Tag <input /> di bawah ini wajib diakhiri dengan /> dalam TSX/JSX */}
                 <input type="text" id="coupon-input" class="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-3 text-sm text-gray-900 dark:text-white uppercase focus:outline-none focus:border-[#ee4d2d]" placeholder="Masukkan kode promo" />
                 <button onclick="applyCoupon()" id="btn-apply-coupon" class="bg-gray-800 dark:bg-gray-700 text-white font-bold px-5 rounded-xl shadow-sm hover:bg-gray-900 transition-colors">Pakai</button>
              </div>
              <p id="coupon-message" class="text-[11px] font-bold mt-2 hidden"></p>
           </div>
 
-          {/* RINGKASAN PEMBAYARAN */}
+          {/* RINGKASAN PEMBAYARAN - PENGEMASAN DIHILANGKAN */}
           <div class="px-4 mt-6">
             <h3 class="text-sm font-black text-gray-900 dark:text-white mb-3">Ringkasan Pembayaran</h3>
             <div class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 space-y-3 text-xs font-medium text-gray-600 dark:text-gray-400">
@@ -110,16 +119,13 @@ export default createRoute(async (c) => {
                 <span id="summary-item-count">Subtotal Harga</span>
                 <span id="summary-subtotal" class="font-bold text-gray-900 dark:text-white">Rp 0</span>
               </div>
-              <div class="flex justify-between">
-                <span>Ongkos Kirim</span>
+              
+              {/* ONGKOS KIRIM */}
+              <div class="flex justify-between border-b border-dashed border-gray-200 dark:border-gray-600 pb-3">
+                <span id="summary-ongkir-label">Ongkos Kirim (Sedang dihitung)</span>
                 <span id="summary-ongkir" class="font-bold text-gray-900 dark:text-white">Rp 0</span>
               </div>
-              <div class="flex justify-between border-b border-dashed border-gray-200 dark:border-gray-600 pb-3">
-                <span>Biaya Layanan & Pengemasan</span>
-                <span id="summary-layanan" class="font-bold text-gray-900 dark:text-white">Rp 0</span>
-              </div>
               
-              {/* Tempat Munculnya Potongan Harga (Dinamis dari JS) */}
               <div id="row-coupon" class="flex justify-between text-green-500 hidden">
                 <span id="coupon-label">Potongan Kupon</span>
                 <span id="summary-coupon" class="font-bold">- Rp 0</span>
@@ -136,9 +142,8 @@ export default createRoute(async (c) => {
             </div>
           </div>
 
-          {/* WIDGET FIXED BUTTON CHECKOUT */}
           <div class="fixed bottom-[60px] left-1/2 transform -translate-x-1/2 w-full max-w-md bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 p-4 z-40 pb-safe">
-            <button onclick="processCheckout()" class="w-full bg-[#ee4d2d] text-white font-black py-4 rounded-2xl shadow-lg shadow-[#ee4d2d]/30 active:scale-[0.98] transition-transform flex justify-between px-5 items-center">
+            <button id="btn-checkout-master" onclick="processCheckout()" class="w-full bg-[#ee4d2d] text-white font-black py-4 rounded-2xl shadow-lg shadow-[#ee4d2d]/30 active:scale-[0.98] transition-transform flex justify-between px-5 items-center disabled:opacity-50 disabled:cursor-not-allowed">
               <span class="text-sm">Pesan & Antar Sekarang</span>
               <span id="checkout-btn-price" class="text-sm bg-white/20 px-3 py-1 rounded-lg">Rp 0</span>
             </button>
@@ -162,7 +167,7 @@ export default createRoute(async (c) => {
               <span class="text-[10px] font-bold">Keranjang</span>
             </a>
             <a href="/users/orders" class="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 hover:text-[#ee4d2d] transition-colors">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
               <span class="text-[10px] font-semibold">Order</span>
             </a>
             <a href="/users/login" class="flex flex-col items-center gap-1 text-gray-400 dark:text-gray-500 hover:text-[#ee4d2d] transition-colors">
@@ -174,32 +179,24 @@ export default createRoute(async (c) => {
 
       </div>
 
-      {/* SCRIPT LOGIKA KUPON & POINT KERANJANG */}
+      {/* SCRIPT LOGIKA KUPON, GPS ONGKIR, & POINT KERANJANG */}
       <script dangerouslySetInnerHTML={{ __html: `
         const DB_ADDRESS = \`${userAddress}\`;
         const DB_POINTS = ${userPoints};
+        const deliverySettings = ${JSON.stringify(deliverySettings)};
         const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
         
-        // Asumsi Biaya Statis (Dalam produksi ini ditarik dari delivery API)
-        const BIAYA_ONGKIR = 10000;
-        const BIAYA_LAYANAN = 3000;
+        // Asumsi Biaya Statis jika tidak ada GPS
+        let calculatedOngkir = 10000;
+        let isOutOfRange = false;
+        let userLat = 0, userLng = 0;
 
         let cart = JSON.parse(localStorage.getItem('spos_cart')) || [];
         
-        // State Diskon
         let appliedCouponCode = '';
         let discountCouponValue = 0;
         let discountPointValue = 0;
         let calculatedSubtotal = 0;
-
-        function initAddress() {
-          if (!DB_ADDRESS) {
-            const savedAddress = localStorage.getItem('user_saved_address');
-            if (savedAddress) {
-              document.getElementById('cart-address-display').innerText = savedAddress;
-            }
-          }
-        }
 
         function showToast(msg, isError = false) {
           const toast = document.createElement('div');
@@ -208,6 +205,79 @@ export default createRoute(async (c) => {
           document.body.appendChild(toast);
           setTimeout(() => toast.classList.remove('opacity-0', 'translate-y-4'), 10);
           setTimeout(() => { toast.classList.add('opacity-0', 'translate-y-4'); setTimeout(() => toast.remove(), 300); }, 2500);
+        }
+
+        // --- MENGHITUNG ONGKIR DENGAN HAVERSINE BERDASARKAN DB ---
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+          const R = 6371; 
+          const dLat = (lat2 - lat1) * Math.PI / 180;
+          const dLon = (lon2 - lon1) * Math.PI / 180;
+          const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+          return R * c; 
+        }
+
+        function determineOngkir(distanceKm) {
+          if(distanceKm > deliverySettings.max_radius_limit) return 'OUT';
+          if(distanceKm <= deliverySettings.free_range_max) return 0;
+          if(distanceKm <= deliverySettings.mid_range_max) return deliverySettings.mid_range_price;
+          return deliverySettings.max_range_price;
+        }
+
+        function detectGPSLocation() {
+          const btn = document.getElementById('btn-gps-refresh');
+          const originalText = btn.innerText;
+          btn.innerText = 'Melacak...';
+          btn.disabled = true;
+
+          if(navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+              async (pos) => {
+                userLat = pos.coords.latitude;
+                userLng = pos.coords.longitude;
+                
+                try {
+                  const res = await fetch(\`https://nominatim.openstreetmap.org/reverse?format=json&lat=\${userLat}&lon=\${userLng}&zoom=16\`);
+                  const data = await res.json();
+                  let streetName = data.address.road || data.display_name.split(',')[0];
+                  document.getElementById('cart-address-display').innerText = streetName;
+                  
+                  const dist = calculateDistance(deliverySettings.resto_lat, deliverySettings.resto_lng, userLat, userLng);
+                  const resultOngkir = determineOngkir(dist);
+
+                  if (resultOngkir === 'OUT') {
+                    isOutOfRange = true;
+                    document.getElementById('cart-distance-display').innerText = \`Jarak: \${dist.toFixed(1)}KM (Di luar jangkauan pengiriman)\`;
+                    document.getElementById('cart-distance-display').classList.replace('text-orange-500', 'text-red-500');
+                    document.getElementById('summary-ongkir-label').innerText = 'Ongkos Kirim';
+                    document.getElementById('summary-ongkir').innerText = 'Tidak Tersedia';
+                    calculatedOngkir = 0;
+                  } else {
+                    isOutOfRange = false;
+                    document.getElementById('cart-distance-display').innerText = \`Jarak: \${dist.toFixed(1)}KM (Masuk jangkauan)\`;
+                    document.getElementById('cart-distance-display').classList.replace('text-red-500', 'text-orange-500');
+                    calculatedOngkir = resultOngkir;
+                    document.getElementById('summary-ongkir-label').innerText = \`Ongkos Kirim (\${dist.toFixed(1)}KM)\`;
+                    document.getElementById('summary-ongkir').innerText = calculatedOngkir === 0 ? 'Gratis' : formatter.format(calculatedOngkir);
+                  }
+                  
+                  calculateGrandTotal();
+                  btn.innerText = 'Deteksi Ulang';
+                  btn.disabled = false;
+                } catch(e) {
+                   showToast('Gagal memuat alamat GPS.', true);
+                   btn.innerText = originalText; btn.disabled = false;
+                }
+              }, 
+              (err) => {
+                showToast('Akses GPS ditolak, harap izinkan dari browser!', true);
+                btn.innerText = originalText; btn.disabled = false;
+              }
+            );
+          } else {
+            showToast('GPS tidak didukung oleh perangkat.', true);
+            btn.innerText = originalText; btn.disabled = false;
+          }
         }
 
         async function applyCoupon() {
@@ -238,7 +308,6 @@ export default createRoute(async (c) => {
                msgBox.innerText = '✓ Kupon berhasil dipakai!';
                msgBox.className = "text-[11px] font-bold mt-2 text-green-500 block";
                
-               // Render ulang total bayar
                calculateGrandTotal();
              } else {
                appliedCouponCode = '';
@@ -281,7 +350,6 @@ export default createRoute(async (c) => {
           } else {
             cart[index].qty += delta;
           }
-          // Reset Kupon untuk menjaga keamanan batas belanja (user harus hit API kupon lagi)
           appliedCouponCode = '';
           discountCouponValue = 0;
           document.getElementById('coupon-message').classList.add('hidden');
@@ -347,19 +415,21 @@ export default createRoute(async (c) => {
             badge.classList.remove('hidden');
           }
 
-          // Segera Kalkulasi Total Biaya & Diskon
           calculateGrandTotal();
         }
 
         function calculateGrandTotal() {
           document.getElementById('summary-subtotal').innerText = formatter.format(calculatedSubtotal);
-          document.getElementById('summary-ongkir').innerText = formatter.format(BIAYA_ONGKIR);
-          document.getElementById('summary-layanan').innerText = formatter.format(BIAYA_LAYANAN);
           
-          // Total Awal sebelum didiskon
-          let grandTotal = calculatedSubtotal + BIAYA_ONGKIR + BIAYA_LAYANAN;
+          let grandTotal = calculatedSubtotal + calculatedOngkir;
+          const masterBtn = document.getElementById('btn-checkout-master');
 
-          // 1. Eksekusi Pemotongan Kupon (Bisa bayar penuh jika Kupon besar)
+          if(isOutOfRange) {
+             masterBtn.disabled = true;
+             masterBtn.innerHTML = '<span class="text-sm">Jarak Terlalu Jauh</span>';
+             return;
+          }
+
           const rowCoupon = document.getElementById('row-coupon');
           if (discountCouponValue > 0) {
              rowCoupon.classList.remove('hidden');
@@ -370,35 +440,35 @@ export default createRoute(async (c) => {
              rowCoupon.classList.add('hidden');
           }
 
-          // 2. Eksekusi Pemotongan Saldo Point Otomatis (Jika sisa Grand Total masih ada)
           const rowPoints = document.getElementById('row-points');
           discountPointValue = 0;
           if (DB_POINTS > 0 && grandTotal > 0) {
-             // Potong point senilai sisa tagihan, tidak boleh melebihi saldo Point
              discountPointValue = Math.min(DB_POINTS, grandTotal);
              grandTotal -= discountPointValue;
-             
              rowPoints.classList.remove('hidden');
              document.getElementById('summary-points').innerText = \`- \${formatter.format(discountPointValue)}\`;
           } else {
              rowPoints.classList.add('hidden');
           }
 
-          // Hindari tagihan negatif (Minimal Tagihan = Rp 0, alias Full Bayar Kupon/Point)
           if(grandTotal < 0) grandTotal = 0;
 
           document.getElementById('summary-grandtotal').innerText = formatter.format(grandTotal);
-          document.getElementById('checkout-btn-price').innerText = formatter.format(grandTotal);
+          masterBtn.disabled = false;
+          masterBtn.innerHTML = \`<span class="text-sm">Pesan & Antar Sekarang</span><span class="text-sm bg-white/20 px-3 py-1 rounded-lg">\${formatter.format(grandTotal)}</span>\`;
         }
 
         async function processCheckout() {
-           const btn = document.querySelector('button[onclick="processCheckout()"]');
+           if(isOutOfRange) {
+              showToast('Maaf, lokasi Anda di luar batas maksimal pengiriman kami.', true);
+              return;
+           }
+
+           const btn = document.getElementById('btn-checkout-master');
            const originalHtml = btn.innerHTML;
            btn.innerHTML = '<span class="text-sm">Memproses...</span>';
            btn.disabled = true;
 
-           // 1. Ambil token dari Cookie agar bisa dikirim ke header Authorization
-           // Fungsi helper untuk baca cookie
            const getCookie = (name) => {
              const value = "; " + document.cookie;
              const parts = value.split("; " + name + "=");
@@ -418,7 +488,8 @@ export default createRoute(async (c) => {
              })),
              coupon_code: appliedCouponCode || null,
              address: address,
-             notes: notes
+             notes: notes,
+             ongkir: calculatedOngkir // Payload dikirim utuh ke Backend
            };
 
            try {
@@ -426,7 +497,7 @@ export default createRoute(async (c) => {
                method: 'POST',
                headers: { 
                  'Content-Type': 'application/json',
-                 'Authorization': 'Bearer ' + token // <--- INI YANG DITAMBAHKAN
+                 'Authorization': 'Bearer ' + token
                },
                body: JSON.stringify(payload)
              });
@@ -450,7 +521,6 @@ export default createRoute(async (c) => {
         }
         
         document.addEventListener('DOMContentLoaded', () => {
-          initAddress();
           renderCart();
         });
       `}} />
