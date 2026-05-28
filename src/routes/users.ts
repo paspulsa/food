@@ -3,6 +3,9 @@ import { Bindings, Variables } from '../types';
 
 export const userRouter = new Hono<{ Bindings: Bindings, Variables: Variables }>();
 
+// Konfigurasi Role yang diizinkan di seluruh sistem
+const allowedRoles = ['ADMIN', 'CASHIER', 'KITCHEN', 'WAITER', 'USER'];
+
 // GET ALL USERS (Mendukung Pagination & Search)
 userRouter.get('/', async (c) => {
   const { current = '1', pageSize = '10', email = '' } = c.req.query();
@@ -51,12 +54,15 @@ userRouter.post('/', async (c) => {
   const body = await c.req.json();
   const id = crypto.randomUUID();
   
-  // Konfigurasi Nilai Default Sesuai Mongoose Schema Anda
+  // Konfigurasi Nilai Default & VALIDASI ROLE
   const gender = body.gender || 'UNKNOWN';
-  const role = body.role || 'USER';
   const avatar = body.avatar || 'default-user.png';
   const isActiveInt = body.isActive ? 1 : 0;
   const accountType = body.accountType || 'LOCAL';
+  
+  // Pengecekan ketat: Jika role yang dikirim tidak ada di allowedRoles, paksa jadi 'USER'
+  const roleInput = body.role ? body.role.toUpperCase() : 'USER';
+  const finalRole = allowedRoles.includes(roleInput) ? roleInput : 'USER';
 
   try {
     await c.env.DB.prepare(
@@ -70,7 +76,7 @@ userRouter.post('/', async (c) => {
       body.age || null, 
       gender, 
       body.address || null, 
-      role, 
+      finalRole, // Gunakan role yang sudah tervalidasi
       body.phone || null, 
       avatar, 
       isActiveInt, 
@@ -96,6 +102,10 @@ userRouter.put('/:id', async (c) => {
   
   const isActiveInt = body.isActive ? 1 : 0;
 
+  // Pengecekan ketat: Jika role yang dikirim tidak ada di allowedRoles, paksa jadi 'USER'
+  const roleInput = body.role ? body.role.toUpperCase() : 'USER';
+  const finalRole = allowedRoles.includes(roleInput) ? roleInput : 'USER';
+
   const { success } = await c.env.DB.prepare(
     `UPDATE users 
      SET name = ?, email = ?, age = ?, gender = ?, address = ?, role = ?, phone = ?, avatar = ?, isActive = ?, accountType = ?, codeId = ?, codeExpired = ?, updated_at = CURRENT_TIMESTAMP 
@@ -106,7 +116,7 @@ userRouter.put('/:id', async (c) => {
     body.age || null, 
     body.gender || 'UNKNOWN', 
     body.address || null, 
-    body.role || 'USER', 
+    finalRole, // Gunakan role yang sudah tervalidasi
     body.phone || null, 
     body.avatar || 'default-user.png', 
     isActiveInt, 
