@@ -16,7 +16,8 @@ import { menuCategoryRouter } from './routes/menuCategories';
 import { promoRouter } from './routes/promos';
 import { couponRouter } from './routes/coupons';
 import { gobizRouter } from './routes/gobiz';
-import { webhookRouter } from './routes/webhook'; // <--- IMPORT ROUTER BARU
+import { webhookRouter } from './routes/webhook';
+import { operationsRouter } from './routes/operations';
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -31,14 +32,11 @@ app.use('*', cors({
 // ==========================================
 // 0. ENDPOINT WEBHOOK (Paling Luar)
 // ==========================================
-// Mendaftarkan Webhook secara langsung di root API agar urlnya menjadi:
-// https://domainanda.com/webhook
 app.route('/webhook', webhookRouter);
 
 // ==========================================
 // 1. RUTE PUBLIK (Dapat diakses tanpa login)
 // ==========================================
-// Mengelompokkan semua API utama ke dalam /api/v1
 const api = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 api.route('/auth', authRouter);
@@ -63,18 +61,47 @@ api.route('/protected/user/orders', orderRouter);
 api.route('/protected/user/profile', userRouter);
 
 // ==========================================
-// 4. ROLE GUARD (Khusus Area Admin)
+// 4. ROLE GUARD BERLAPIS (Proteksi Semua Role)
 // ==========================================
+
+// Guard Khusus Admin
 api.use('/protected/admin/*', async (c, next) => {
   const payload = c.get('jwtPayload');
   if (payload.role !== 'ADMIN') {
-    return c.json({ success: false, message: 'Akses ditolak. Anda bukan Admin!' }, 403);
+    return c.json({ success: false, message: 'Akses ditolak. Khusus Admin!' }, 403);
+  }
+  await next();
+});
+
+// Guard Khusus Kasir (Admin juga diizinkan)
+api.use('/protected/ops/cashier/*', async (c, next) => {
+  const payload = c.get('jwtPayload');
+  if (payload.role !== 'ADMIN' && payload.role !== 'CASHIER') {
+    return c.json({ success: false, message: 'Akses ditolak. Khusus Kasir!' }, 403);
+  }
+  await next();
+});
+
+// Guard Khusus Dapur (Admin juga diizinkan)
+api.use('/protected/ops/kitchen/*', async (c, next) => {
+  const payload = c.get('jwtPayload');
+  if (payload.role !== 'ADMIN' && payload.role !== 'KITCHEN') {
+    return c.json({ success: false, message: 'Akses ditolak. Khusus Dapur!' }, 403);
+  }
+  await next();
+});
+
+// Guard Khusus Waiter (Admin juga diizinkan)
+api.use('/protected/ops/waiter/*', async (c, next) => {
+  const payload = c.get('jwtPayload');
+  if (payload.role !== 'ADMIN' && payload.role !== 'WAITER') {
+    return c.json({ success: false, message: 'Akses ditolak. Khusus Pelayan!' }, 403);
   }
   await next();
 });
 
 // ==========================================
-// 5. RUTE KHUSUS ADMIN (Web Dashboard)
+// 5. RUTE KHUSUS ADMIN & OPERASIONAL
 // ==========================================
 api.route('/protected/admin/restaurants', restaurantRouter);
 api.route('/protected/admin/users', userRouter);
@@ -86,7 +113,9 @@ api.route('/protected/admin/promos', promoRouter);
 api.route('/protected/admin/coupons', couponRouter);
 api.route('/protected/admin/gobiz', gobizRouter);
 
-// Pasang sub-router api ke root aplikasi
+// Mendaftarkan Rute Operasional yang tadi Error 500
+api.route('/protected/ops', operationsRouter);
+
 app.route('/api/v1', api);
 
 export default app;
