@@ -1,78 +1,5 @@
 import { createRoute } from 'honox/factory'
-import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
-import { verify } from 'hono/jwt'
-
-export const POST = createRoute(async (c) => {
-  const db = c.env.DB;
-  const body = await c.req.json();
-  const token = getCookie(c, 'admin_token');
-  let cashierName = 'Kasir';
-  try { const payload = await verify(token, c.env.JWT_SECRET, 'HS256'); cashierName = payload.name as string; } catch(e){}
-
-  try {
-    // 1. BUKA SHIFT & ABSENSI STAF
-    if (body.action === 'start_shift') {
-      const shiftId = 'SHF-' + crypto.randomUUID().substring(0,8).toUpperCase();
-      
-      // Catat Sesi Kasir & Modal Awal
-      await db.prepare(`INSERT INTO cashier_shifts (id, cashier_name, starting_cash, starting_app_balance) VALUES (?, ?, ?, ?)`).bind(shiftId, cashierName, body.start_cash, body.start_app).run();
-      
-      // Catat Absensi Staf Terpilih
-      if (body.active_staff && Array.isArray(body.active_staff)) {
-         for (const staffId of body.active_staff) {
-            const staffInfo: any = await db.prepare("SELECT name, role FROM users WHERE id = ?").bind(staffId).first();
-            if(staffInfo) {
-               await db.prepare("INSERT INTO shift_attendance (id, shift_id, staff_id, staff_name, role) VALUES (?, ?, ?, ?, ?)")
-                     .bind(crypto.randomUUID(), shiftId, staffId, staffInfo.name, staffInfo.role).run();
-            }
-         }
-      }
-
-      // Generate Otomatis Snapshot Stok Awal
-      await db.prepare(`INSERT INTO shift_stock_snapshots (id, shift_id, snapshot_type, menu_item_id, item_name, stock_quantity) SELECT lower(hex(randomblob(16))), ?, 'START', id, name, stock FROM menu_items`).bind(shiftId).run();
-
-      setCookie(c, 'current_shift_id', shiftId, { path: '/', maxAge: 86400 });
-      return c.json({ success: true, message: 'Shift berhasil dibuka!' });
-    }
-
-    // 2. KELUARKAN STAF (IZIN PULANG AWAL)
-    if (body.action === 'kick_staff') {
-      await db.prepare("UPDATE shift_attendance SET clock_out = CURRENT_TIMESTAMP, reason_left = ?, status = 'ENDED' WHERE id = ?")
-            .bind(body.reason, body.attendance_id).run();
-      return c.json({ success: true, message: 'Staf berhasil diizinkan pulang.' });
-    }
-
-    // 3. TUTUP SHIFT & GENERATE LAPORAN
-    if (body.action === 'close_shift') {
-      const shiftId = getCookie(c, 'current_shift_id');
-      
-      // Bebaskan sisa staf yang masih aktif
-      await db.prepare("UPDATE shift_attendance SET clock_out = CURRENT_TIMESTAMP, reason_left = 'Shift Ditutup Kasir', status = 'ENDED' WHERE shift_id = ? AND status = 'ACTIVE'").bind(shiftId).run();
-      
-      // Buat Snapshot Stok Akhir
-      await db.prepare(`INSERT INTO shift_stock_snapshots (id, shift_id, snapshot_type, menu_item_id, item_name, stock_quantity) SELECT lower(hex(randomblob(16))), ?, 'END', id, name, stock FROM menu_items`).bind(shiftId).run();
-      
-      // Tutup Sesi Kasir
-      await db.prepare("UPDATE cashier_shifts SET end_time = CURRENT_TIMESTAMP, status = 'CLOSED' WHERE id = ?").bind(shiftId).run();
-      
-      deleteCookie(c, 'current_shift_id', { path: '/' });
-      return c.json({ success: true, message: 'Laporan Penutupan Sesi berhasil di-generate!' });
-    }
-
-    // 4. TERIMA UANG & UBAH STATUS PAKSA (Orderan)
-    if (body.action === 'pay_cash') {
-      await db.prepare("UPDATE transactions SET status = 'PAID' WHERE order_id = ?").bind(body.order_id).run();
-      await db.prepare("UPDATE orders SET status = 'PROCESSING', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(body.order_id).run();
-      return c.json({ success: true });
-    }
-    if (body.action === 'update_order_status') {
-      await db.prepare("UPDATE orders SET status = ?, kitchen_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(body.new_status, body.new_kitchen, body.order_id).run();
-      return c.json({ success: true });
-    }
-
-    return c.json({ success: false }, 400);
-  } catch (e: any) { return c.json({ success: false, message: e.message }, 500); }
-});
+import { getCookie } from 'hono/cookie'
 
 export default createRoute(async (c) => {
   const db = c.env.DB;
@@ -137,9 +64,7 @@ export default createRoute(async (c) => {
              </div>
            </div>
            
-           {/* Tombol Aksi Absolute Bawah (Tetap di dalam kartu besar di layar MD) */}
            <div class="w-full pt-6 border-t border-gray-100 dark:border-darkborder mt-4 col-span-full md:absolute md:bottom-8 md:left-8 md:right-8 md:w-auto md:border-none md:mt-0 md:pt-0 pointer-events-none hidden md:block">
-              {/* Spacer buat desktop agar ga nimpa konten */}
            </div>
 
         </div>
@@ -170,12 +95,30 @@ export default createRoute(async (c) => {
                color: document.documentElement.classList.contains('dark') ? '#f3f4f6' : '#1f2937'
              }).then(async (result) => {
                 if(result.isConfirmed) {
-                  const res = await fetch('/cashier', { 
-                    method: 'POST', headers:{'Content-Type':'application/json'}, 
-                    body: JSON.stringify({action: 'start_shift', start_cash: startCash, start_app: startApp, active_staff: activeStaff}) 
-                  });
-                  const data = await res.json();
-                  if(data.success) window.location.reload();
+                  const token = document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1];
+                  if (!token) return Swal.fire('Error', 'Sesi login kedaluwarsa.', 'error');
+
+                  Swal.fire({ title: 'Memproses...', allowOutsideClick: false, background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', didOpen: () => { Swal.showLoading() } });
+
+                  try {
+                      // TEMBAK KE API BACKEND
+                      const res = await fetch('/api/v1/protected/ops/shift/start', { 
+                        method: 'POST', 
+                        headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer ' + token }, 
+                        body: JSON.stringify({ start_cash: startCash, start_app: startApp, active_staff: activeStaff }) 
+                      });
+                      const data = await res.json();
+                      
+                      if(data.success) {
+                         // Set cookie shift manual di frontend untuk memicu reload page ke Dashboard Shift
+                         document.cookie = "current_shift_id=" + data.shift_id + "; path=/; max-age=86400;";
+                         window.location.reload();
+                      } else {
+                         Swal.fire('Gagal', data.message, 'error');
+                      }
+                  } catch(e) {
+                      Swal.fire('Error', 'Gangguan koneksi ke server.', 'error');
+                  }
                 }
              })
           }
@@ -291,6 +234,26 @@ export default createRoute(async (c) => {
             };
         }
 
+        // FUNGSI HELPER UNTUK REQUEST API BACKEND
+        async function apiRequest(endpoint, bodyData) {
+            const token = document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1];
+            if (!token) {
+               Swal.fire('Error', 'Sesi kedaluwarsa. Silakan muat ulang halaman.', 'error');
+               return { success: false };
+            }
+            try {
+               const res = await fetch('/api/v1/protected/ops' + endpoint, { 
+                   method: 'POST', 
+                   headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer ' + token }, 
+                   body: JSON.stringify(bodyData) 
+               });
+               return await res.json();
+            } catch(e) {
+               Swal.fire('Error', 'Gangguan koneksi ke server.', 'error');
+               return { success: false };
+            }
+        }
+
         function kickStaff(attId, name) {
            const theme = getSwalTheme();
            Swal.fire({
@@ -303,8 +266,7 @@ export default createRoute(async (c) => {
              inputValidator: (value) => { if (!value) return 'Wajib isi alasan!' }
            }).then(async (result) => {
              if (result.isConfirmed) {
-                const res = await fetch('/cashier', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ action: 'kick_staff', attendance_id: attId, reason: result.value }) });
-                const data = await res.json();
+                const data = await apiRequest('/shift/kick-staff', { attendance_id: attId, reason: result.value });
                 if(data.success) window.location.reload();
              }
            });
@@ -314,17 +276,22 @@ export default createRoute(async (c) => {
            const theme = getSwalTheme();
            Swal.fire({
              title: 'Tutup Sesi & Shift?',
-             text: 'Sistem akan melakukan snapshot stok akhir dan membuat laporan penutupan (Semua pekerja aktif akan otomatis di-clock out).',
+             text: 'Sistem akan membuat laporan penutupan (Semua pekerja aktif akan otomatis di-clock out).',
              icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'Tutup Shift Sekarang',
              background: theme.background, color: theme.color
            }).then(async (result) => {
              if (result.isConfirmed) {
-                Swal.fire({ title: 'Memproses...', text: 'Membuat snapshot akhir...', allowOutsideClick: false, background: theme.background, color: theme.color, didOpen: () => { Swal.showLoading() } });
-                const res = await fetch('/cashier', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ action: 'close_shift' }) });
-                const data = await res.json();
+                Swal.fire({ title: 'Memproses...', text: 'Membuat laporan akhir...', allowOutsideClick: false, background: theme.background, color: theme.color, didOpen: () => { Swal.showLoading() } });
+                
+                const shiftId = document.cookie.split('; ').find(row => row.startsWith('current_shift_id='))?.split('=')[1];
+                const data = await apiRequest('/shift/close', { shift_id: shiftId });
+                
                 if(data.success) {
+                   document.cookie = "current_shift_id=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
                    Swal.fire({title: 'Selesai', text: data.message, icon: 'success', background: theme.background, color: theme.color}).then(() => window.location.reload());
-                } else { Swal.fire({title: 'Error', text: data.message, icon: 'error', background: theme.background, color: theme.color}); }
+                } else { 
+                   Swal.fire({title: 'Error', text: data.message, icon: 'error', background: theme.background, color: theme.color}); 
+                }
              }
            });
         }
@@ -337,8 +304,7 @@ export default createRoute(async (c) => {
             background: theme.background, color: theme.color
           }).then(async (result) => {
             if (result.isConfirmed) {
-              const res = await fetch('/cashier', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ action: 'pay_cash', order_id: orderId }) });
-              const data = await res.json();
+              const data = await apiRequest('/transactions/pay-cash', { order_id: orderId });
               if(data.success) window.location.reload();
             }
           });
@@ -353,8 +319,7 @@ export default createRoute(async (c) => {
              background: theme.background, color: theme.color
            }).then(async (result) => {
               if (result.isConfirmed) {
-                 const res = await fetch('/cashier', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ action: 'update_order_status', order_id: orderId, new_status: newStatus, new_kitchen: newKitchen }) });
-                 const data = await res.json();
+                 const data = await apiRequest('/transactions/force-status', { order_id: orderId, new_status: newStatus, new_kitchen: newKitchen });
                  if(data.success) window.location.reload();
               }
            })
