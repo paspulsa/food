@@ -3,32 +3,38 @@ import { Bindings, Variables } from '../types';
 
 export const gobizRouter = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// ==========================================
-// 1. HEADERS MUTLAK DARI SCRIPT PHP ANDA
-// (Anti-Block Cloudflare WAF)
-// ==========================================
-const getGojekHeaders = (token: string | null, deviceId: string) => ({
-    'Host': 'api.gobiz.co.id',
-    'Content-Type': 'application/json',
-    'Accept': 'application/json, text/plain, */*',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'x-appid': 'go-biz-web-dashboard',
-    'x-client-id': 'go-biz-web-new',
-    'x-appversion': 'platform-v3.94.0-5aa26703', // Dari PHP Anda
-    'x-deviceos': 'Web',
-    'x-phonemake': 'Windows 10 64-bit',         // Dari PHP Anda
-    'x-phonemodel': 'Chrome 120.0.0.0 on Windows 10 64-bit', // Dari PHP Anda
-    'x-platform': 'Web',
-    'x-uniqueid': deviceId,
-    'x-user-type': 'merchant',
-    'x-user-locale': 'en-US',
-    'gojek-country-code': 'ID',
-    'gojek-timezone': 'Asia/Jakarta',
-    'Authentication-Type': 'go-id',
-    'Origin': 'https://portal.gofoodmerchant.co.id',
-    'Referer': 'https://portal.gofoodmerchant.co.id/',
-    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-});
+// ======================================================================
+// 1. HEADERS KONSISTEN 100% DARI SCRIPT PHP (ANTI-WAF CLOUDFLARE)
+// ======================================================================
+const getGojekHeaders = (token: string | null, deviceId: string) => {
+    const headers: Record<string, string> = {
+        'Host': 'api.gobiz.co.id',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/plain, */*',
+        'Origin': 'https://portal.gofoodmerchant.co.id',
+        'Referer': 'https://portal.gofoodmerchant.co.id/',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'x-appid': 'go-biz-web-dashboard',
+        'x-client-id': 'go-biz-web-new',
+        'x-appversion': 'platform-v3.94.0-5aa26703',
+        'x-deviceos': 'Web',
+        'x-phonemake': 'Windows 10 64-bit',
+        'x-phonemodel': 'Chrome 120.0.0.0 on Windows 10 64-bit',
+        'x-platform': 'Web',
+        'x-uniqueid': deviceId,
+        'x-user-type': 'merchant',
+        'x-user-locale': 'en-US',
+        'gojek-country-code': 'ID',
+        'gojek-timezone': 'Asia/Jakarta',
+        'Authentication-Type': 'go-id'
+    };
+    
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    return headers;
+};
 
 async function getConfig(db: D1Database) {
     let config: any = await db.prepare('SELECT * FROM config WHERE id = 1').first();
@@ -62,7 +68,7 @@ function getDateRange(filter: string) {
 }
 
 // ======================================================================
-// BUILD QUERY TRANSAKSI SESUAI LOG ASLI GOJEK
+// 2. QUERY JSON KONSISTEN DARI TRACE LOG GOJEK
 // ======================================================================
 function buildGojekQuery(merchantId: string, fromISO: string, toISO?: string) {
     const clauses: any[] = [
@@ -110,8 +116,9 @@ async function fetchStats(config: any, fromISO: string, toISO: string) {
 }
 
 // ==========================================
-// API LOGIN BERDASARKAN PHP SCRIPT
+// 3. API OTENTIKASI 
 // ==========================================
+
 gobizRouter.post('/login', async (c) => {
     try {
         const body = await c.req.json();
@@ -129,8 +136,8 @@ gobizRouter.post('/login', async (c) => {
         try { 
             data = JSON.parse(text); 
         } catch(e) { 
-            console.error("[LOGIN ERROR] Cloudflare Block / Invalid JSON:", text);
-            return c.json({ error: "API Error - Diblokir oleh Gojek. Pastikan Headers sesuai.", details: text }, 400); 
+            console.error("[LOGIN ERROR] Respons bukan JSON:", text);
+            return c.json({ error: "API Error - Diblokir oleh Gojek", details: text }, 400); 
         }
 
         if (resp.ok && (data?.data?.otp_token || data?.otp_token)) {
@@ -156,11 +163,11 @@ gobizRouter.post('/verify', async (c) => {
         try { 
             tokenData = JSON.parse(text); 
         } catch(e) { 
-            console.error("[VERIFY ERROR] Cloudflare Block / Invalid JSON:", text);
+            console.error("[VERIFY ERROR] Respons bukan JSON:", text);
             return c.json({ error: "API Error - Diblokir oleh Gojek", details: text }, 400); 
         }
 
-        if (!tokenData.access_token) return c.json({ error: 'OTP Salah' }, 401);
+        if (!tokenData.access_token) return c.json({ error: 'OTP Salah / Sesi Habis' }, 401);
 
         const profileResp = await fetch('https://api.gobiz.co.id/v1/merchants/search?from=0&size=1', {
             method: 'POST', 
@@ -206,6 +213,10 @@ gobizRouter.post('/logout', async (c) => {
     await c.env.DB.prepare('UPDATE config SET access_token = NULL, refresh_token = NULL WHERE id = 1').run();
     return c.json({ status: 'success' });
 });
+
+// ==========================================
+// 4. API DATA (BALANCE & MUTATIONS)
+// ==========================================
 
 gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
     const config = c.get('config');
