@@ -72,7 +72,7 @@ export default createRoute(async (c) => {
         <div id="view-dash" class="tab-content hidden space-y-6">
           <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div class="bg-green-600 text-white p-5 rounded-2xl shadow-lg shadow-green-600/30 flex flex-col justify-between">
-              <p class="text-sm font-medium text-green-100">Saldo Realtime (10 Malam)</p>
+              <p class="text-sm font-medium text-green-100">Saldo (Sejak 22:00)</p>
               <h3 class="text-2xl font-black mt-2 truncate" id="d-bal">Rp ...</h3>
             </div>
             <div class="bg-gray-50 dark:bg-darkbg border border-gray-100 dark:border-gray-700 p-5 rounded-2xl flex flex-col justify-between">
@@ -240,7 +240,7 @@ export default createRoute(async (c) => {
         }
 
         // DASHBOARD & MUTATIONS LOGIC
-        window.activeMutations = []; // Variabel global untuk menyimpan data tabel agar bisa di-export
+        window.activeMutations = [];
         window.activeFilter = 'hari ini';
 
         async function loadDashboardData() {
@@ -262,12 +262,12 @@ export default createRoute(async (c) => {
           const tbody = document.getElementById('t-mut');
           tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-xs text-gray-400">Menarik data dari server...</td></tr>';
           
-          window.activeFilter = filter; // simpan referensi nama laporan
+          window.activeFilter = filter;
 
           try {
             const res = await api.get('/mutations?filter=' + filter);
             if(res.status === 'success' && res.transactions.length > 0) {
-              window.activeMutations = res.transactions; // Save array for PDF
+              window.activeMutations = res.transactions;
               
               tbody.innerHTML = res.transactions.map(x => \`
                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
@@ -295,7 +295,6 @@ export default createRoute(async (c) => {
           const { jsPDF } = window.jspdf;
           const doc = new jsPDF();
           
-          // Header Laporan
           doc.setFontSize(16);
           doc.text("Laporan Transaksi GoPay Merchant", 14, 20);
           
@@ -303,7 +302,6 @@ export default createRoute(async (c) => {
           doc.text("Dicetak pada: " + new Date().toLocaleString('id-ID'), 14, 28);
           doc.text("Rentang Waktu: " + window.activeFilter.toUpperCase(), 14, 34);
 
-          // Susun Data Tabel
           let totalNominal = 0;
           const tableBody = window.activeMutations.map((tx, i) => {
             totalNominal += tx.amount;
@@ -316,23 +314,17 @@ export default createRoute(async (c) => {
             ];
           });
           
-          // Tambahkan row Total di paling bawah
           tableBody.push([{ content: 'TOTAL KESELURUHAN', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } }, { content: 'Rp ' + Math.floor(totalNominal).toLocaleString('id-ID'), styles: { fontStyle: 'bold', textColor: [22, 163, 74] } }]);
 
-          // Buat Tabel
           doc.autoTable({
             startY: 42,
             head: [['No', 'Waktu', 'Order ID', 'Status', 'Nominal']],
             body: tableBody,
             theme: 'striped',
-            headStyles: { fillColor: [22, 163, 74] }, // Warna Hijau Tailwind
-            columnStyles: {
-              0: { cellWidth: 10 },
-              4: { halign: 'right' }
-            }
+            headStyles: { fillColor: [22, 163, 74] },
+            columnStyles: { 0: { cellWidth: 10 }, 4: { halign: 'right' } }
           });
 
-          // Generate Download
           const filename = \`Laporan_GoPay_\${window.activeFilter}_\${Date.now()}.pdf\`;
           doc.save(filename);
         }
