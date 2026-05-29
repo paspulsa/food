@@ -7,8 +7,10 @@ export const operationsRouter = new Hono<{ Bindings: Bindings, Variables: Variab
 operationsRouter.post('/shift/start', async (c) => {
     const db = c.env.DB;
     const body = await c.req.json();
+    
+    // PERBAIKAN: Gunakan fallback secara aman agar tidak D1_TYPE_ERROR 'undefined'
     const payload = c.get('jwtPayload'); 
-    const cashierName = payload.name as string;
+    const cashierName = payload && payload.name ? payload.name : 'Kasir Sistem';
 
     try {
         const shiftId = 'SHF-' + crypto.randomUUID().substring(0,8).toUpperCase();
