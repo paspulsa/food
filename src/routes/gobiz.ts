@@ -58,14 +58,15 @@ function getDateRange(filter: string) {
 }
 
 // ======================================================================
-// FUNGSI INI ADALAH KUNCI: 100% MENGIKUTI PAYLOAD ASLI DARI LOG ANDA
+// HELPER: BUILD QUERY 100% SESUAI LOG MIDTRANS/GOJEK ANDA
 // ======================================================================
-function buildGojekQuery(merchantId: string, fromISO: string, toISO?: string) {
+function buildGojekQuery(merchantId: string, fromISO: string, toISO?: string, isStrictGt: boolean = false) {
     const clauses: any[] = [
         { op: "not", clauses: [{ op: "or", clauses: [{ field: "metadata.source", op: "in", value: ["GOSAVE_ONLINE", "GoSave", "GODEALS_ONLINE"] }, { field: "metadata.gopay.source", op: "in", value: ["GOSAVE_ONLINE", "GoSave", "GODEALS_ONLINE"] }] }] },
         { field: "metadata.transaction.status", op: "in", value: ["settlement", "capture", "refund", "partial_refund"] },
         { op: "or", clauses: [{ op: "or", clauses: [{ field: "metadata.transaction.payment_type", op: "in", value: ["qris", "gopay", "offline_credit_card", "offline_debit_card", "credit_card"] }] }] },
-        { field: "metadata.transaction.transaction_time", op: "gte", value: fromISO },
+        // isStrictGt = true digunakan untuk mencari data SETELAH (gt) waktu payout
+        { field: "metadata.transaction.transaction_time", op: isStrictGt ? "gt" : "gte", value: fromISO },
         { field: "metadata.transaction.merchant_id", op: "equal", value: merchantId }
     ];
     if (toISO) clauses.push({ field: "metadata.transaction.transaction_time", op: "lte", value: toISO });
@@ -78,7 +79,7 @@ function buildGojekQuery(merchantId: string, fromISO: string, toISO?: string) {
 }
 
 async function fetchStats(config: any, fromISO: string, toISO: string) {
-    const payload = buildGojekQuery(config.merchant_id, fromISO, toISO);
+    const payload = buildGojekQuery(config.merchant_id, fromISO, toISO, false);
     try {
         const resp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(payload) });
         if (!resp.ok) return { count: 0, amount: 0 };
@@ -91,8 +92,10 @@ async function fetchStats(config: any, fromISO: string, toISO: string) {
             const orderId = metaTx.order_id || h.reference_id;
             if (!processed.has(orderId)) { 
                 processed.add(orderId); 
-                count++; 
-                amount += ((h.amount || metaTx.amount || 0) / 100); // Harus dibagi 100 (Cents ke Rupiah)
+                if (metaTx.status === 'settlement') {
+                    count++; 
+                    amount += ((h.amount || metaTx.amount || 0) / 100); 
+                }
             }
         });
         return { count, amount };
@@ -180,61 +183,46 @@ gobizRouter.post('/logout', async (c) => {
 gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
     const config = c.get('config');
     try {
-        // --- 1. TITIK NOL: JAM 22:00 WIB (Sesuai kesepakatan) ---
-        const nowStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" });
-        const jktDate = new Date(nowStr);
-        if (jktDate.getHours() < 22) jktDate.setDate(jktDate.getDate() - 1);
+        // --- 1. AMBIL WAKTU PAYOUT TERAKHIR ---
+        const payoutResp = await fetch(`https://api.gobiz.co.id/v1/merchants/payouts?page=1&per=1`, { 
+            method: 'GET', headers: getGojekHeaders(config.access_token, config.device_id) 
+        });
+        const payoutData: any = await payoutResp.json();
         
-        const yyyy = jktDate.getFullYear();
-        const mm = String(jktDate.getMonth() + 1).padStart(2, '0');
-        const dd = String(jktDate.getDate()).padStart(2, '0');
-        const cutOffTimeISO = `${yyyy}-${mm}-${dd}T22:00:00+07:00`;
-        const cutOffTimeMs = new Date(cutOffTimeISO).getTime();
+        let lastPayoutDateISO = "2020-01-01T00:00:00.000Z"; 
+        if (payoutData.payouts && payoutData.payouts.length > 0) {
+            // Kita langsung tarik `created_at` dari payout (contoh: 2026-05-29T17:13:01+07:00)
+            lastPayoutDateISO = new Date(payoutData.payouts[0].created_at).toISOString();
+        }
 
-        // --- 2. HITUNG PEMASUKAN SETELAH TITIK NOL ---
-        const balancePayload = buildGojekQuery(config.merchant_id, cutOffTimeISO);
+        // --- 2. HITUNG PEMASUKAN *SETELAH* WAKTU PAYOUT TERAKHIR ---
+        // Argumen "true" berarti op: "gt" (Lebih besar DARI waktu payout tsb). Tidak perlu lagi pengurangan manual!
+        const balancePayload = buildGojekQuery(config.merchant_id, lastPayoutDateISO, undefined, true);
         const balanceResp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(balancePayload) });
         
         if (balanceResp.status === 401) return c.json({ error: 'Session expired' }, 401);
         
         const balanceData: any = await balanceResp.json();
-        let totalPemasukan = 0; 
+        let realBalance = 0; 
         const processedBalanceIds = new Set();
+        
         (balanceData.hits || []).forEach((h: any) => {
             const metaTx = h.metadata?.transaction || {};
             const orderId = metaTx.order_id || h.reference_id;
             if (!processedBalanceIds.has(orderId)) { 
                 processedBalanceIds.add(orderId); 
-                totalPemasukan += ((h.amount || metaTx.amount || 0) / 100); 
+                // Cek ulang hanya status settlement yang dihitung
+                if (metaTx.status === 'settlement') {
+                    realBalance += ((h.amount || metaTx.amount || 0) / 100); 
+                }
             }
         });
 
-        // --- 3. HITUNG PENGELUARAN (PAYOUT MANUAL) SETELAH TITIK NOL ---
-        let totalPengeluaran = 0;
-        try {
-            const payoutResp = await fetch(`https://api.gobiz.co.id/v1/merchants/payouts?page=1&per=10`, { 
-                method: 'GET', headers: getGojekHeaders(config.access_token, config.device_id) 
-            });
-            const payoutData: any = await payoutResp.json();
-            
-            (payoutData.payouts || []).forEach((p: any) => {
-                const payoutTime = new Date(p.created_at).getTime();
-                // Buffer 5 Menit: Abaikan Auto-Payout sistem Gojek yang terjadi tepat 22:00
-                if (payoutTime > (cutOffTimeMs + 5 * 60000)) {
-                    totalPengeluaran += (parseFloat(p.net_amount || p.amount || 0) / 100);
-                }
-            });
-        } catch (err) {}
-
-        let realBalance = totalPemasukan - totalPengeluaran;
-        if (realBalance < 0) realBalance = 0; 
-
-        // --- 4. REKAP DATA: HARI INI, MINGGU INI, BULAN INI ---
+        // --- 3. REKAP DATA: HARI INI, MINGGU INI, BULAN INI ---
         const { from: tFrom, to: tTo } = getDateRange('today');
         const { from: wFrom, to: wTo } = getDateRange('week');
         const { from: mFrom, to: mTo } = getDateRange('month');
 
-        // Panggil helper yang sudah pakai payload resmi
         const [today, week, month] = await Promise.all([
             fetchStats(config, tFrom, tTo),
             fetchStats(config, wFrom, wTo),
@@ -253,7 +241,7 @@ gobizRouter.get('/mutations', requireGoBizAuth, async (c) => {
     const config = c.get('config');
     const { from, to } = getDateRange(c.req.query('filter') || 'today');
     try {
-        const payload = buildGojekQuery(config.merchant_id, from, to);
+        const payload = buildGojekQuery(config.merchant_id, from, to, false);
         const resp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(payload) });
         
         if (resp.status === 401) return c.json({ error: 'Session expired' }, 401);
