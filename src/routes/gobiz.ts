@@ -139,7 +139,7 @@ gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
     const config = c.get('config');
     const db = c.env.DB;
     try {
-        // --- 1. LOGIKA SALDO MENGENDAP (CUT-OFF 22:00 WIB) ---
+        // --- 1. TITIK NOL: JAM 22:00 WIB (Kemarin atau Hari Ini) ---
         const nowStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" });
         const jktDate = new Date(nowStr);
         if (jktDate.getHours() < 22) jktDate.setDate(jktDate.getDate() - 1);
@@ -148,26 +148,59 @@ gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
         const mm = String(jktDate.getMonth() + 1).padStart(2, '0');
         const dd = String(jktDate.getDate()).padStart(2, '0');
         const cutOffTimeISO = `${yyyy}-${mm}-${dd}T22:00:00+07:00`;
+        const cutOffTimeMs = new Date(cutOffTimeISO).getTime();
 
-        const balancePayload = { from: 0, size: 500, sort: { time: { order: "desc" } }, included_categories: { incoming: ["transaction_share", "action"] }, query: [{ op: "and", clauses: [{ field: "metadata.transaction.merchant_id", op: "equal", value: config.merchant_id }, { field: "metadata.transaction.status", op: "in", value: ["settlement"] }, { field: "metadata.transaction.transaction_time", op: "gt", value: cutOffTimeISO }] }] };
+        // --- 2. HITUNG PEMASUKAN (SETTLEMENT) SETELAH TITIK NOL ---
+        const balancePayload = { 
+            from: 0, size: 500, sort: { time: { order: "desc" } }, 
+            included_categories: { incoming: ["transaction_share", "action"] }, 
+            query: [{ op: "and", clauses: [{ field: "metadata.transaction.merchant_id", op: "equal", value: config.merchant_id }, { field: "metadata.transaction.status", op: "in", value: ["settlement"] }, { field: "metadata.transaction.transaction_time", op: "gt", value: cutOffTimeISO }] }] 
+        };
         const balanceResp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(balancePayload) });
         
         if (balanceResp.status === 401) return c.json({ error: 'Session expired' }, 401);
         
         const balanceData: any = await balanceResp.json();
-        let realBalance = 0; const processedBalanceIds = new Set();
+        let totalPemasukan = 0; 
+        const processedBalanceIds = new Set();
         (balanceData.hits || []).forEach((h: any) => {
             const metaTx = h.metadata?.transaction || {};
             const orderId = metaTx.order_id || h.reference_id;
-            if (!processedBalanceIds.has(orderId)) { processedBalanceIds.add(orderId); realBalance += ((h.amount || metaTx.amount || 0) / 100); }
+            if (!processedBalanceIds.has(orderId)) { 
+                processedBalanceIds.add(orderId); 
+                totalPemasukan += ((h.amount || metaTx.amount || 0) / 100); 
+            }
         });
 
-        // --- 2. LOGIKA REKAP DATA: HARI, MINGGU, BULAN ---
+        // --- 3. HITUNG PENGELUARAN (PAYOUT MANUAL) SETELAH TITIK NOL ---
+        let totalPengeluaran = 0;
+        try {
+            // Tarik riwayat payout terbaru dari Gojek
+            const payoutResp = await fetch(`https://api.gobiz.co.id/v1/merchants/payouts?page=1&per=10`, { 
+                method: 'GET', headers: getGojekHeaders(config.access_token, config.device_id) 
+            });
+            const payoutData: any = await payoutResp.json();
+            
+            (payoutData.payouts || []).forEach((p: any) => {
+                const payoutTime = new Date(p.created_at).getTime();
+                // Jika pemilik warung melakukan payout manual SETELAH jam 10 malam terakhir
+                if (payoutTime > cutOffTimeMs) {
+                    totalPengeluaran += (parseFloat(p.net_amount || p.amount || 0) / 100);
+                }
+            });
+        } catch (err) {
+            console.error("Gagal menarik data pengeluaran manual", err);
+        }
+
+        // --- 4. SALDO AKHIR = PEMASUKAN - PENGELUARAN ---
+        let realBalance = totalPemasukan - totalPengeluaran;
+        if (realBalance < 0) realBalance = 0; // Mencegah tampilan minus jika ada delay sinkronisasi API
+
+        // --- 5. LOGIKA REKAP DATA: HARI, MINGGU, BULAN ---
         const { from: monthFrom, to: monthTo } = getDateRange('month');
         const { from: weekFrom } = getDateRange('week');
         const { from: todayFrom } = getDateRange('today');
 
-        // Tarik 1 bulan sekaligus untuk diolah (Maksimal 1000 item agar aman dari limit)
         const statsPayload = { 
             from: 0, size: 1000, 
             included_categories: { incoming: ["transaction_share", "action"] }, 
@@ -192,11 +225,8 @@ gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
                 const amt = ((h.amount || metaTx.amount || 0) / 100);
                 const txTime = new Date(h.time || metaTx.transaction_time).getTime();
                 
-                // Selalu masuk hitungan Bulan Ini
                 monthCount++; monthAmount += amt;
-                // Cek apakah masuk hitungan Minggu Ini
                 if (txTime >= wFrom) { weekCount++; weekAmount += amt; }
-                // Cek apakah masuk hitungan Hari Ini
                 if (txTime >= tFrom) { todayCount++; todayAmount += amt; }
             }
         });
