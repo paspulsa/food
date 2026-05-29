@@ -2,7 +2,7 @@ import { createRoute } from 'honox/factory'
 import { getCookie } from 'hono/cookie'
 
 // ==========================================
-// API HANDLER (Fungsi Tambah, Hapus, Kosongkan)
+// API HANDLER (Fungsi Tambah, Hapus, Kosongkan, Set Domain)
 // ==========================================
 export const POST = createRoute(async (c) => {
   const db = c.env.DB;
@@ -25,8 +25,24 @@ export const POST = createRoute(async (c) => {
       return c.json({ success: true, message: `Meja berhasil dihapus dari sistem.` });
     }
 
+    // FUNGSI BARU: SIMPAN DOMAIN KE DATABASE GLOBAL
+    if (body.action === 'save_domain') {
+      await db.prepare("UPDATE config SET user_domain = ? WHERE id = 1").bind(body.domain).run();
+      return c.json({ success: true, message: `Domain aplikasi pelanggan berhasil disimpan secara global.` });
+    }
+
     return c.json({ success: false, message: 'Aksi tidak dikenali' }, 400);
   } catch (error: any) {
+    // AUTO MIGRATION: Jika kolom user_domain belum ada di tabel config, buatkan secara otomatis!
+    if (error.message.includes('no such column: user_domain')) {
+        try {
+            await db.prepare("ALTER TABLE config ADD COLUMN user_domain TEXT").run();
+            await db.prepare("UPDATE config SET user_domain = ? WHERE id = 1").bind(body.domain).run();
+            return c.json({ success: true, message: `Kolom database berhasil di-upgrade otomatis & Domain disimpan.` });
+        } catch (migrationError: any) {
+            return c.json({ success: false, message: 'Gagal meng-upgrade tabel config: ' + migrationError.message }, 500);
+        }
+    }
     return c.json({ success: false, message: 'Kesalahan Server: ' + error.message }, 500);
   }
 });
@@ -35,12 +51,20 @@ export const POST = createRoute(async (c) => {
 // RENDERER HALAMAN UTAMA (UI)
 // ==========================================
 export default createRoute(async (c) => {
-  // PERBAIKAN BUG: Nama cookie yang benar adalah 'current_shift_id'
   const shiftActive = getCookie(c, 'current_shift_id');
   if (!shiftActive) return c.redirect('/cashier'); 
 
   const db = c.env.DB;
+  
+  // Tarik Data Meja
   const { results: tables } = await db.prepare(`SELECT id, name, status FROM tables ORDER BY name ASC`).all();
+
+  // Tarik Pengaturan Domain Global dengan fallback (Try-Catch mencegah crash jika kolom belum dibuat)
+  let dbDomain = 'https://kpkembar88.pages.dev';
+  try {
+     const conf: any = await db.prepare("SELECT user_domain FROM config WHERE id = 1").first();
+     if (conf && conf.user_domain) dbDomain = conf.user_domain;
+  } catch(e) {}
 
   return c.render(
     <div class="space-y-6 pb-12">
@@ -70,8 +94,8 @@ export default createRoute(async (c) => {
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
          {/* Setting Domain Aplikasi User */}
          <div class="lg:col-span-1 bg-white dark:bg-darkpanel p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-darkborder">
-            <h3 class="font-black text-sm text-gray-800 dark:text-white mb-1 uppercase tracking-wider">Domain Aplikasi Publik</h3>
-            <p class="text-[10px] text-gray-500 dark:text-gray-400 mb-3">Tentukan URL aplikasi khusus pelanggan agar QR Code mengarah ke website yang tepat.</p>
+            <h3 class="font-black text-sm text-gray-800 dark:text-white mb-1 uppercase tracking-wider">Domain Web Pengguna</h3>
+            <p class="text-[10px] text-gray-500 dark:text-gray-400 mb-3">URL di bawah ini akan di-embed langsung ke dalam QR Code. Tersimpan otomatis di server.</p>
             <div class="flex gap-2">
                <input type="text" id="domain-input" placeholder="https://domain-pelanggan.com" class="flex-1 bg-gray-50 dark:bg-darkbg border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm font-medium focus:outline-none focus:border-primary text-gray-900 dark:text-white transition-colors" />
                <button onclick="saveDomain()" class="bg-gray-800 dark:bg-gray-700 hover:bg-gray-900 dark:hover:bg-gray-600 text-white font-bold px-4 rounded-xl shadow-sm active:scale-95 transition-transform text-sm">Simpan</button>
@@ -105,7 +129,7 @@ export default createRoute(async (c) => {
                  
                  {/* Tombol Hapus (Hanya muncul jika IDLE) */}
                  {!isOccupied && (
-                    <button onclick={`deleteTable('${t.id}', '${t.name}')`} class="absolute top-3 right-3 w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 text-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:text-white">
+                    <button onclick={`deleteTable('${t.id}', '${t.name.replace(/'/g, "\\'")}')`} class="absolute top-3 right-3 w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 text-red-500 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:text-white">
                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                     </button>
                  )}
@@ -124,12 +148,12 @@ export default createRoute(async (c) => {
                  
                  <div class="flex gap-2">
                     {isOccupied ? (
-                       <button onclick={`freeTable('${t.id}', '${t.name}')`} class="flex-1 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 text-red-600 hover:bg-red-500 hover:text-white font-bold py-2.5 rounded-xl transition-all shadow-sm active:scale-95 text-xs flex justify-center items-center gap-1.5">
+                       <button onclick={`freeTable('${t.id}', '${t.name.replace(/'/g, "\\'")}')`} class="flex-1 bg-white dark:bg-gray-800 border border-red-200 dark:border-red-800 text-red-600 hover:bg-red-500 hover:text-white font-bold py-2.5 rounded-xl transition-all shadow-sm active:scale-95 text-xs flex justify-center items-center gap-1.5">
                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                          Kosongkan
                        </button>
                     ) : (
-                       <button onclick={`showQR('${t.id}', '${t.name}')`} class="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-primary hover:text-white font-bold py-2.5 rounded-xl transition-all shadow-sm active:scale-95 text-xs flex justify-center items-center gap-1.5">
+                       <button onclick={`showQR('${t.id}', '${t.name.replace(/'/g, "\\'")}')`} class="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-primary hover:text-white font-bold py-2.5 rounded-xl transition-all shadow-sm active:scale-95 text-xs flex justify-center items-center gap-1.5">
                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm14 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path></svg>
                          Lihat QR
                        </button>
@@ -154,7 +178,7 @@ export default createRoute(async (c) => {
             
             <div class="bg-white mx-6 -mt-6 rounded-xl shadow-lg p-5 border border-gray-100 flex flex-col items-center justify-center">
                <div id="qrcode-container" class="bg-white p-2"></div>
-               <p class="text-[9px] text-gray-400 mt-4 break-all w-full leading-tight font-mono bg-gray-50 p-2 rounded" id="qr-url-text"></p>
+               <p class="text-[9px] text-gray-400 mt-4 break-all w-full leading-tight font-mono bg-gray-50 p-2 rounded border border-gray-100" id="qr-url-text"></p>
             </div>
             
             <div class="p-6 bg-gray-50 mt-4 print:hidden">
@@ -175,19 +199,38 @@ export default createRoute(async (c) => {
             };
         }
 
-        // LOAD DOMAIN DARI LOCALSTORAGE
-        let userDomain = localStorage.getItem('spos_user_domain') || 'https://kpkembar88-user.pages.dev';
+        // LOAD DOMAIN DARI DATABASE YANG DI-INJECT KE SINI OLEH SERVER
+        let userDomain = "${dbDomain}";
+        
         document.addEventListener('DOMContentLoaded', () => {
            document.getElementById('domain-input').value = userDomain;
         });
 
-        // SIMPAN DOMAIN
+        // SIMPAN DOMAIN KE DATABASE GLOBAL
         function saveDomain() {
            const val = document.getElementById('domain-input').value;
            if(val && val.startsWith('http')) {
-              userDomain = val;
-              localStorage.setItem('spos_user_domain', val);
-              Swal.fire({title: 'Tersimpan', text: 'Domain URL pesanan pelanggan berhasil diatur.', icon: 'success', ...getSwalTheme()});
+              Swal.fire({
+                title: 'Menyimpan...',
+                allowOutsideClick: false,
+                ...getSwalTheme(),
+                didOpen: () => { Swal.showLoading(); }
+              });
+              
+              fetch('/cashier/tables', {
+                 method: 'POST',
+                 headers: {'Content-Type': 'application/json'},
+                 body: JSON.stringify({ action: 'save_domain', domain: val })
+              }).then(res => res.json()).then(data => {
+                 if (data.success) {
+                    userDomain = val; // Update variabel lokal agar QR merespons langsung
+                    Swal.fire({title: 'Tersimpan', text: data.message, icon: 'success', ...getSwalTheme()});
+                 } else {
+                    Swal.fire({title: 'Gagal', text: data.message, icon: 'error', ...getSwalTheme()});
+                 }
+              }).catch(err => {
+                 Swal.fire({title: 'Error', text: 'Terjadi kesalahan jaringan', icon: 'error', ...getSwalTheme()});
+              });
            } else {
               Swal.fire({title: 'Format Salah', text: 'Domain harus diawali dengan http:// atau https://', icon: 'error', ...getSwalTheme()});
            }
@@ -261,6 +304,8 @@ export default createRoute(async (c) => {
         let currentQR = null;
         function showQR(id, name) {
            document.getElementById('qr-table-name').innerText = name;
+           
+           // Gunakan userDomain yang ditarik dari database Server
            const cleanDomain = userDomain.replace(/\\/$/, '');
            const finalUrl = \`\${cleanDomain}/?table_id=\${encodeURIComponent(id)}&table_name=\${encodeURIComponent(name)}\`;
            document.getElementById('qr-url-text').innerText = finalUrl;
