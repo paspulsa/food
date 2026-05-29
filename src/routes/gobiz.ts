@@ -138,7 +138,7 @@ gobizRouter.post('/logout', async (c) => {
 gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
     const config = c.get('config');
     try {
-        // --- 1. MENGAMBIL TITIK 0 DARI HISTORI PAYOUT API GOJEK (Sesuai Referensi) ---
+        // --- 1. MENGAMBIL TITIK 0 DARI HISTORI PAYOUT TERAKHIR (Persis seperti file referensi) ---
         const payoutResp = await fetch(`https://api.gobiz.co.id/v1/merchants/payouts?page=1&per=1`, { 
             method: 'GET', headers: getGojekHeaders(config.access_token, config.device_id) 
         });
@@ -148,7 +148,7 @@ gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
             lastPayoutDateISO = new Date(payoutData.payouts[0].created_at).toISOString();
         }
 
-        // --- 2. HITUNG SALDO REALTIME MENGGUNAKAN TITIK 0 TERSEBUT ---
+        // --- 2. HITUNG SALDO REALTIME SETELAH TITIK 0 ---
         const balancePayload = { 
             from: 0, size: 500, sort: { time: { order: "desc" } }, 
             included_categories: { incoming: ["transaction_share", "action"] }, 
@@ -170,12 +170,12 @@ gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
             }
         });
 
-        // --- 3. REKAP DATA: HARI INI, MINGGU INI, BULAN INI (Sesuai Format Referensi Query) ---
+        // --- 3. REKAP STATISTIK HARI, MINGGU, BULAN ---
+        // (Sengaja TANPA included_categories persis seperti todayPayload di referensi, agar data terbaca utuh)
         const { from: monthFrom, to: monthTo } = getDateRange('month');
         const { from: weekFrom } = getDateRange('week');
         const { from: todayFrom } = getDateRange('today');
 
-        // Menghapus 'included_categories' murni mencontoh struktur 'todayPayload' dari referensi Anda
         const statsPayload = { 
             from: 0, size: 500, 
             query: [{ op: "and", clauses: [{ field: "metadata.transaction.merchant_id", op: "equal", value: config.merchant_id }, { field: "metadata.transaction.status", op: "in", value: ["settlement"] }, { field: "metadata.transaction.transaction_time", op: "gte", value: monthFrom }, { field: "metadata.transaction.transaction_time", op: "lte", value: monthTo }] }] 
@@ -223,10 +223,9 @@ gobizRouter.get('/mutations', requireGoBizAuth, async (c) => {
     const config = c.get('config');
     const { from, to } = getDateRange(c.req.query('filter') || 'today');
     try {
-        // FORMAT QUERY INI MENGADOPSI MUTLAK DARI REFERENSI ANDA
+        // TANPA included_categories agar status EXPIRE juga ikut ditarik (Sesuai dengan screenshot Anda)
         const payload = { 
             from: 0, size: 500, sort: { time: { order: "desc" } }, 
-            included_categories: { incoming: ["transaction_share", "action"] }, 
             query: [{ op: "and", clauses: [{ field: "metadata.transaction.merchant_id", op: "equal", value: config.merchant_id }, { field: "metadata.transaction.transaction_time", op: "gte", value: from }, { field: "metadata.transaction.transaction_time", op: "lte", value: to }] }] 
         };
         const resp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(payload) });
