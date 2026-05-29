@@ -72,7 +72,8 @@ export default createRoute(async (c) => {
         <div id="view-dash" class="tab-content hidden space-y-6">
           <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div class="bg-green-600 text-white p-5 rounded-2xl shadow-lg shadow-green-600/30 flex flex-col justify-between">
-              <p class="text-sm font-medium text-green-100">Saldo (Sejak 22:00)</p>
+              {/* PERUBAHAN: Teks "10 Malam" dibuang, diganti ID dinamis */}
+              <p class="text-sm font-medium text-green-100" id="d-bal-label">Saldo (Menghitung...)</p>
               <h3 class="text-2xl font-black mt-2 truncate" id="d-bal">Rp ...</h3>
             </div>
             <div class="bg-gray-50 dark:bg-darkbg border border-gray-100 dark:border-gray-700 p-5 rounded-2xl flex flex-col justify-between">
@@ -248,6 +249,11 @@ export default createRoute(async (c) => {
             const res = await api.get('/balance');
             if(res.status === 'success') {
               document.getElementById('d-bal').innerText = 'Rp ' + Math.floor(res.balance).toLocaleString('id-ID');
+              
+              // PERBAIKAN: Tampilkan waktu payout ke UI
+              if (res.last_payout_label) {
+                document.getElementById('d-bal-label').innerText = 'Saldo (Sejak ' + res.last_payout_label + ')';
+              }
               
               document.getElementById('d-today').innerHTML = \`Rp \${Math.floor(res.today.amount).toLocaleString('id-ID')} <br><span class="text-xs font-normal text-gray-500">(\${res.today.count} Trx)</span>\`;
               document.getElementById('d-week').innerHTML = \`Rp \${Math.floor(res.week.amount).toLocaleString('id-ID')} <br><span class="text-xs font-normal text-gray-500">(\${res.week.count} Trx)</span>\`;
