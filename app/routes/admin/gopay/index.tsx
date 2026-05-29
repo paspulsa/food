@@ -4,13 +4,16 @@ export default createRoute(async (c) => {
   const config = await c.env.DB.prepare('SELECT * FROM config WHERE id = 1').first<any>();
   const isConnected = !!(config && config.access_token);
   const merchantName = config?.merchant_name || 'Belum Terhubung';
-  const apiKey = config?.api_key || 'Generate otomatis saat API diakses';
 
   return c.render(
     <div class="space-y-6 pb-10">
       {/* Dependency Eksternal */}
       <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
       <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+      
+      {/* JS PDF untuk Export Laporan */}
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 
       {/* HEADER SECTION */}
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-darkpanel p-6 rounded-2xl border border-gray-100 dark:border-darkborder shadow-sm">
@@ -27,12 +30,11 @@ export default createRoute(async (c) => {
         </div>
       </div>
 
-      {/* TABS NAVIGATION */}
+      {/* TABS NAVIGATION (Hanya 3 Tab) */}
       <div class="flex overflow-x-auto hide-scrollbar gap-2 bg-white dark:bg-darkpanel p-2 rounded-2xl border border-gray-100 dark:border-darkborder shadow-sm">
         <button onclick="switchTab('auth')" id="tab-auth" class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all bg-green-50 text-green-600 dark:bg-green-500/10 dark:text-green-400">🔑 Otentikasi</button>
         <button onclick="switchTab('dash')" id="tab-dash" class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800">📊 Dashboard</button>
         <button onclick="switchTab('qris')" id="tab-qris" class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800">⚡ QRIS Dinamis</button>
-        <button onclick="switchTab('api')" id="tab-api" class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800">⚙️ Master API</button>
       </div>
 
       {/* KONTEN TABS */}
@@ -68,25 +70,37 @@ export default createRoute(async (c) => {
 
         {/* TAB 2: DASHBOARD & MUTASI */}
         <div id="view-dash" class="tab-content hidden space-y-6">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div class="bg-green-600 text-white p-5 rounded-2xl shadow-lg shadow-green-600/30 flex flex-col justify-between">
-              <p class="text-sm font-medium text-green-100">Saldo Realtime (Settlement)</p>
-              <h3 class="text-3xl font-black mt-2" id="d-bal">Rp ...</h3>
+              <p class="text-sm font-medium text-green-100">Saldo Realtime (10 Malam)</p>
+              <h3 class="text-2xl font-black mt-2 truncate" id="d-bal">Rp ...</h3>
             </div>
             <div class="bg-gray-50 dark:bg-darkbg border border-gray-100 dark:border-gray-700 p-5 rounded-2xl flex flex-col justify-between">
-              <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Trx GoPay Hari Ini</p>
-              <h3 class="text-3xl font-black text-gray-800 dark:text-white mt-2" id="d-count">...</h3>
+              <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Hari Ini</p>
+              <h3 class="text-xl font-black text-gray-800 dark:text-white mt-2 truncate" id="d-today">Rp ...</h3>
+            </div>
+            <div class="bg-gray-50 dark:bg-darkbg border border-gray-100 dark:border-gray-700 p-5 rounded-2xl flex flex-col justify-between">
+              <p class="text-xs font-bold text-gray-500 uppercase tracking-wider">Minggu Ini</p>
+              <h3 class="text-xl font-black text-gray-800 dark:text-white mt-2 truncate" id="d-week">Rp ...</h3>
             </div>
             <div class="bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 p-5 rounded-2xl flex flex-col justify-between">
-              <p class="text-xs font-bold text-blue-500 uppercase tracking-wider">Total Lunas via API</p>
-              <h3 class="text-3xl font-black text-blue-600 mt-2" id="d-api">...</h3>
+              <p class="text-xs font-bold text-blue-500 uppercase tracking-wider">Bulan Ini</p>
+              <h3 class="text-xl font-black text-blue-600 mt-2 truncate" id="d-month">Rp ...</h3>
             </div>
           </div>
 
           <div class="border border-gray-100 dark:border-gray-700 rounded-2xl overflow-hidden">
-            <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 flex gap-2 border-b border-gray-100 dark:border-gray-700">
-              <button onclick="loadMutations('today')" class="bg-white dark:bg-darkpanel text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:text-green-600 transition">Hari Ini</button>
-              <button onclick="loadMutations('week')" class="bg-white dark:bg-darkpanel text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:text-green-600 transition">Minggu Ini</button>
+            <div class="bg-gray-50 dark:bg-gray-800 px-4 py-3 flex gap-2 border-b border-gray-100 dark:border-gray-700 items-center justify-between">
+              <div class="flex gap-2">
+                <button onclick="loadMutations('today')" class="bg-white dark:bg-darkpanel text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:text-green-600 transition">Hari Ini</button>
+                <button onclick="loadMutations('week')" class="bg-white dark:bg-darkpanel text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:text-green-600 transition">Minggu Ini</button>
+                <button onclick="loadMutations('month')" class="bg-white dark:bg-darkpanel text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:text-green-600 transition">Bulan Ini</button>
+              </div>
+              
+              <button onclick="exportDataToPDF()" class="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow-sm transition flex items-center gap-2">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V7.414A2 2 0 0015.414 6L12 2.586A2 2 0 0010.586 2H6zm5 6a1 1 0 10-2 0v3.586l-1.293-1.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V8z" clip-rule="evenodd"></path></svg>
+                Export PDF
+              </button>
             </div>
             <div class="overflow-x-auto max-h-64 overflow-y-auto">
               <table class="w-full text-left text-sm whitespace-nowrap">
@@ -143,74 +157,39 @@ export default createRoute(async (c) => {
           </div>
         </div>
 
-        {/* TAB 4: MASTER API */}
-        <div id="view-api" class="tab-content hidden space-y-6">
-          <div class="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-900/30 p-4 rounded-xl max-w-2xl mx-auto">
-            <h3 class="font-bold text-blue-800 dark:text-blue-400 text-sm mb-2">🔑 Master API Key</h3>
-            <div class="flex gap-2">
-              <input id="api-key-display" class="w-full bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-900/50 p-2.5 rounded-lg text-sm font-mono text-gray-800 dark:text-gray-300 outline-none" readonly value={apiKey} onclick="this.select()" />
-            </div>
-            <p class="text-xs text-blue-600 mt-2">Gunakan token ini sebagai "Bearer Token" jika Anda ingin menembak API /trx dari luar sistem.</p>
-          </div>
-        </div>
-
       </div>
 
       {/* JAVASCRIPT KONTROL LOGIKA */}
       <script dangerouslySetInnerHTML={{ __html: `
-        // HELPER API LOKAL -> URL MENGARAH KE /api/v1/protected/admin/gobiz/* SEKARANG
         function getAdminToken() {
           return document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1] || '';
         }
 
-        // ==========================================
-        // PERUBAHAN: INTERCEPTOR 401 & AUTO-REFRESH
-        // ==========================================
         const api = {
           async fetchWithRetry(url, options) {
             const baseUrl = '/api/v1/protected/admin/gobiz';
             let res = await fetch(baseUrl + url, options);
             let data = await res.json().catch(() => ({}));
 
-            // Cek jika endpoint merespons dengan 401 atau Sesi Expired
             if (res.status === 401 || data.error === 'Session expired') {
               console.warn('Sesi terdeteksi mati, mencoba auto-refresh...');
+              const refreshRes = await fetch(baseUrl + '/refresh', { method: 'POST', headers: { 'Authorization': 'Bearer ' + getAdminToken() } });
               
-              // Tembak endpoint refresh di backend Anda
-              // Catatan: Pastikan Anda punya route backend '/refresh' untuk menghandle refresh_token ke Gojek
-              const refreshRes = await fetch(baseUrl + '/refresh', {
-                method: 'POST',
-                headers: { 'Authorization': 'Bearer ' + getAdminToken() }
-              });
-
               if (refreshRes.ok) {
-                console.log('Token Gojek berhasil diperbarui! Mengulangi request aslinya...');
-                // Ulangi request aslinya
                 res = await fetch(baseUrl + url, options);
                 data = await res.json().catch(() => ({}));
               } else {
-                console.error('Refresh gagal. Membutuhkan login ulang.');
                 Swal.fire('Sesi Habis', 'Sesi login GoBiz Anda telah berakhir, silakan login ulang.', 'warning');
-                switchTab('auth'); // Otomatis tendang user ke tab login
+                switchTab('auth');
               }
             }
             return data;
           },
-          get(url) {
-            return this.fetchWithRetry(url, { 
-              headers: { 'Authorization': 'Bearer ' + getAdminToken() } 
-            });
-          },
-          post(url, body) {
-            return this.fetchWithRetry(url, { 
-              method: 'POST', 
-              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAdminToken() }, 
-              body: JSON.stringify(body) 
-            });
-          }
+          get(url) { return this.fetchWithRetry(url, { headers: { 'Authorization': 'Bearer ' + getAdminToken() } }); },
+          post(url, body) { return this.fetchWithRetry(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAdminToken() }, body: JSON.stringify(body) }); }
         };
 
-        // NAVIGASI TABS
+        // UI NAVIGATION
         function switchTab(id) {
           document.querySelectorAll('.tab-content').forEach(e => e.classList.add('hidden'));
           document.querySelectorAll('[id^="tab-"]').forEach(e => {
@@ -224,16 +203,12 @@ export default createRoute(async (c) => {
           if(id === 'qris') loadInjectorLog();
         }
 
-        // ============================
-        // LOGIKA OTENTIKASI GOBIZ
-        // ============================
+        // AUTHENTICATION LOGIC
         async function requestOtp() {
           const email = document.getElementById('l_email').value;
           if(!email) return Swal.fire('Error', 'Email wajib diisi', 'error');
-          
           const btn = document.getElementById('btn-otp');
           btn.innerText = 'Mengirim...'; btn.disabled = true;
-
           try {
             const res = await api.post('/login', { email });
             if(res.status === 'success') {
@@ -241,9 +216,7 @@ export default createRoute(async (c) => {
               document.getElementById('step-otp').classList.remove('hidden');
               document.getElementById('l_token').value = res.otp_token;
               document.getElementById('l_device').value = res.device_id;
-            } else {
-              Swal.fire('Gagal', res.error || 'Ditolak Gojek', 'error');
-            }
+            } else Swal.fire('Gagal', res.error || 'Ditolak Gojek', 'error');
           } catch(e) { Swal.fire('Error', 'Koneksi terputus', 'error'); }
           btn.innerText = 'Kirim OTP'; btn.disabled = false;
         }
@@ -251,55 +224,51 @@ export default createRoute(async (c) => {
         async function verifyOtp() {
           const btn = document.getElementById('btn-verify');
           btn.innerText = 'Verifikasi...'; btn.disabled = true;
-          
-          const payload = {
-            otp: document.getElementById('l_otp').value,
-            otp_token: document.getElementById('l_token').value,
-            device_id: document.getElementById('l_device').value
-          };
-
           try {
-            const res = await api.post('/verify', payload);
-            if(res.status === 'success') {
-              Swal.fire('Sukses', 'Berhasil terhubung ke GoBiz!', 'success').then(() => location.reload());
-            } else {
-              Swal.fire('Gagal', res.error || 'OTP Salah', 'error');
-              btn.innerText = 'Verifikasi OTP'; btn.disabled = false;
-            }
-          } catch(e) { 
-            Swal.fire('Error', 'Koneksi terputus', 'error'); 
-            btn.innerText = 'Verifikasi OTP'; btn.disabled = false;
-          }
+            const res = await api.post('/verify', {
+              otp: document.getElementById('l_otp').value,
+              otp_token: document.getElementById('l_token').value,
+              device_id: document.getElementById('l_device').value
+            });
+            if(res.status === 'success') Swal.fire('Sukses', 'Terhubung ke GoBiz!', 'success').then(() => location.reload());
+            else { Swal.fire('Gagal', res.error || 'OTP Salah', 'error'); btn.innerText = 'Verifikasi OTP'; btn.disabled = false; }
+          } catch(e) { Swal.fire('Error', 'Koneksi terputus', 'error'); btn.innerText = 'Verifikasi OTP'; btn.disabled = false; }
         }
 
         async function logoutGoBiz() {
-          if(confirm('Yakin ingin memutuskan koneksi dengan GoBiz?')) {
-            await api.post('/logout', {});
-            location.reload();
-          }
+          if(confirm('Yakin putus koneksi GoBiz?')) { await api.post('/logout', {}); location.reload(); }
         }
 
-        // ============================
-        // LOGIKA DASHBOARD & MUTASI
-        // ============================
+        // DASHBOARD & MUTATIONS LOGIC
+        window.activeMutations = []; // Variabel global untuk menyimpan data tabel agar bisa di-export
+        window.activeFilter = 'hari ini';
+
         async function loadDashboardData() {
           try {
             const res = await api.get('/balance');
             if(res.status === 'success') {
               document.getElementById('d-bal').innerText = 'Rp ' + Math.floor(res.balance).toLocaleString('id-ID');
-              document.getElementById('d-count').innerText = res.trx_count_gopay;
-              document.getElementById('d-api').innerText = res.trx_count_api;
+              
+              document.getElementById('d-today').innerHTML = \`Rp \${Math.floor(res.today.amount).toLocaleString('id-ID')} <br><span class="text-xs font-normal text-gray-500">(\${res.today.count} Trx)</span>\`;
+              document.getElementById('d-week').innerHTML = \`Rp \${Math.floor(res.week.amount).toLocaleString('id-ID')} <br><span class="text-xs font-normal text-gray-500">(\${res.week.count} Trx)</span>\`;
+              document.getElementById('d-month').innerHTML = \`Rp \${Math.floor(res.month.amount).toLocaleString('id-ID')} <br><span class="text-xs font-normal text-gray-500">(\${res.month.count} Trx)</span>\`;
+              
               loadMutations('today');
             }
-          } catch(e) { console.log('Belum terhubung ke GoBiz'); }
+          } catch(e) { console.log('Belum terhubung'); }
         }
 
         async function loadMutations(filter) {
           const tbody = document.getElementById('t-mut');
-          tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-xs text-gray-400">Menarik data dari server Gojek...</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-xs text-gray-400">Menarik data dari server...</td></tr>';
+          
+          window.activeFilter = filter; // simpan referensi nama laporan
+
           try {
             const res = await api.get('/mutations?filter=' + filter);
             if(res.status === 'success' && res.transactions.length > 0) {
+              window.activeMutations = res.transactions; // Save array for PDF
+              
               tbody.innerHTML = res.transactions.map(x => \`
                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                   <td class="p-3 text-xs">\${new Date(x.time).toLocaleString('id-ID')}</td>
@@ -309,16 +278,66 @@ export default createRoute(async (c) => {
                 </tr>
               \`).join('');
             } else {
+              window.activeMutations = [];
               tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-xs text-gray-400">Tidak ada mutasi.</td></tr>';
             }
           } catch(e) {
-            tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-xs text-red-400">Gagal memuat mutasi (Cek Login).</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-xs text-red-400">Gagal memuat mutasi.</td></tr>';
           }
         }
 
-        // ============================
-        // LOGIKA QRIS DINAMIS
-        // ============================
+        // PDF EXPORT LOGIC
+        function exportDataToPDF() {
+          if (!window.activeMutations || window.activeMutations.length === 0) {
+            return Swal.fire('Kosong', 'Tidak ada transaksi untuk diekspor pada filter ini.', 'warning');
+          }
+
+          const { jsPDF } = window.jspdf;
+          const doc = new jsPDF();
+          
+          // Header Laporan
+          doc.setFontSize(16);
+          doc.text("Laporan Transaksi GoPay Merchant", 14, 20);
+          
+          doc.setFontSize(10);
+          doc.text("Dicetak pada: " + new Date().toLocaleString('id-ID'), 14, 28);
+          doc.text("Rentang Waktu: " + window.activeFilter.toUpperCase(), 14, 34);
+
+          // Susun Data Tabel
+          let totalNominal = 0;
+          const tableBody = window.activeMutations.map((tx, i) => {
+            totalNominal += tx.amount;
+            return [
+              i + 1,
+              new Date(tx.time).toLocaleString('id-ID'),
+              tx.order_id,
+              tx.status.toUpperCase(),
+              'Rp ' + Math.floor(tx.amount).toLocaleString('id-ID')
+            ];
+          });
+          
+          // Tambahkan row Total di paling bawah
+          tableBody.push([{ content: 'TOTAL KESELURUHAN', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold' } }, { content: 'Rp ' + Math.floor(totalNominal).toLocaleString('id-ID'), styles: { fontStyle: 'bold', textColor: [22, 163, 74] } }]);
+
+          // Buat Tabel
+          doc.autoTable({
+            startY: 42,
+            head: [['No', 'Waktu', 'Order ID', 'Status', 'Nominal']],
+            body: tableBody,
+            theme: 'striped',
+            headStyles: { fillColor: [22, 163, 74] }, // Warna Hijau Tailwind
+            columnStyles: {
+              0: { cellWidth: 10 },
+              4: { halign: 'right' }
+            }
+          });
+
+          // Generate Download
+          const filename = \`Laporan_GoPay_\${window.activeFilter}_\${Date.now()}.pdf\`;
+          doc.save(filename);
+        }
+
+        // QRIS DINAMIS LOGIC
         function decodeQR(input) {
           const reader = new FileReader();
           reader.onload = e => {
@@ -332,9 +351,7 @@ export default createRoute(async (c) => {
               if (data) {
                 document.getElementById('c_raw').value = data.data;
                 Swal.fire('Berhasil', 'Kode RAW berhasil diekstrak!', 'success');
-              } else {
-                Swal.fire('Gagal', 'QR Code tidak terbaca. Pastikan gambar jelas.', 'error');
-              }
+              } else Swal.fire('Gagal', 'QR Code tidak terbaca. Pastikan gambar jelas.', 'error');
             };
             img.src = e.target.result;
           };
@@ -345,7 +362,6 @@ export default createRoute(async (c) => {
           const min = document.getElementById('c_min').value;
           const max = document.getElementById('c_max').value;
           const raw = document.getElementById('c_raw').value;
-          
           await api.post('/config/range', { min, max });
           await api.post('/config/master-qr', { raw_qris: raw });
           Swal.fire('Sukses', 'Konfigurasi QRIS berhasil disimpan', 'success');
@@ -363,13 +379,10 @@ export default createRoute(async (c) => {
                   <td class="p-2 text-[9px] font-bold uppercase \${x.status === 'PAID' ? 'text-green-500' : 'text-gray-400'}">\${x.status}</td>
                 </tr>
               \`).join('');
-            } else {
-              tbody.innerHTML = '<tr><td colspan="3" class="p-2 italic text-center">Belum ada transaksi di-generate.</td></tr>';
-            }
+            } else tbody.innerHTML = '<tr><td colspan="3" class="p-2 italic text-center">Belum ada transaksi di-generate.</td></tr>';
           } catch(e) {}
         }
 
-        // INIT SAAT PERTAMA LOAD
         document.addEventListener('DOMContentLoaded', () => {
           const isConnected = ${isConnected};
           if(isConnected) switchTab('dash');
