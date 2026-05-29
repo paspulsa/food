@@ -35,7 +35,6 @@ async function getConfig(db: D1Database) {
     return config;
 }
 
-// Middleware Cek Sesi Aktif GoBiz
 const requireGoBizAuth = async (c: any, next: any) => {
     const config: any = await getConfig(c.env.DB);
     if (!config || !config.access_token) return c.json({ status: 'error', message: 'Session expired' }, 401);
@@ -65,8 +64,7 @@ gobizRouter.post('/login', async (c) => {
         if (!body.email) return c.json({ error: "Email wajib diisi" }, 400);
 
         const resp = await fetch('https://api.gobiz.co.id/goid/login/request', {
-            method: 'POST', 
-            headers: getGojekHeaders(null, deviceId),
+            method: 'POST', headers: getGojekHeaders(null, deviceId),
             body: JSON.stringify({ client_id: "go-biz-web-new", email: body.email })
         });
         
@@ -87,8 +85,7 @@ gobizRouter.post('/verify', async (c) => {
         const { otp, otp_token, device_id } = body;
         
         const tokenResp = await fetch('https://api.gobiz.co.id/goid/token', {
-            method: 'POST', 
-            headers: getGojekHeaders(null, device_id),
+            method: 'POST', headers: getGojekHeaders(null, device_id),
             body: JSON.stringify({ client_id: "go-biz-web-new", grant_type: "otp", data: { otp_token, otp: String(otp) } })
         });
         
@@ -113,38 +110,21 @@ gobizRouter.post('/verify', async (c) => {
     } catch (e: any) { return c.json({ error: e.message }, 500); }
 });
 
-// ==========================================
-// ENDPOINT BARU: AUTO REFRESH TOKEN
-// ==========================================
 gobizRouter.post('/refresh', async (c) => {
     const config: any = await getConfig(c.env.DB);
     if (!config || !config.refresh_token) return c.json({ error: 'No refresh token available' }, 401);
-
     try {
         const resp = await fetch('https://api.gobiz.co.id/goid/token', {
-            method: 'POST',
-            headers: getGojekHeaders(null, config.device_id),
-            body: JSON.stringify({
-                client_id: "go-biz-web-new",
-                grant_type: "refresh_token",
-                data: { refresh_token: config.refresh_token }
-            })
+            method: 'POST', headers: getGojekHeaders(null, config.device_id),
+            body: JSON.stringify({ client_id: "go-biz-web-new", grant_type: "refresh_token", data: { refresh_token: config.refresh_token } })
         });
-
         const data: any = await resp.json();
-
         if (resp.ok && data.access_token) {
             const now = Math.floor(Date.now() / 1000);
             const newRefreshToken = data.refresh_token || config.refresh_token;
-
-            await c.env.DB.prepare(`
-                UPDATE config SET access_token = ?, refresh_token = ?, updated_at = ? WHERE id = 1
-            `).bind(data.access_token, newRefreshToken, now).run();
-
+            await c.env.DB.prepare('UPDATE config SET access_token = ?, refresh_token = ?, updated_at = ? WHERE id = 1').bind(data.access_token, newRefreshToken, now).run();
             return c.json({ status: 'success' });
         }
-
-        // Jika refresh gagal (token benar-benar expired), bersihkan sesi
         await c.env.DB.prepare('UPDATE config SET access_token = NULL, refresh_token = NULL WHERE id = 1').run();
         return c.json({ error: 'Session permanently expired' }, 401);
     } catch (e: any) { return c.json({ error: e.message }, 500); }
@@ -159,9 +139,7 @@ gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
     const config = c.get('config');
     const db = c.env.DB;
     try {
-        // ==========================================
-        // LOGIKA CUT-OFF JAM 22:00 WIB
-        // ==========================================
+        // --- 1. LOGIKA SALDO MENGENDAP (CUT-OFF 22:00 WIB) ---
         const nowStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" });
         const jktDate = new Date(nowStr);
         if (jktDate.getHours() < 22) jktDate.setDate(jktDate.getDate() - 1);
@@ -174,7 +152,6 @@ gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
         const balancePayload = { from: 0, size: 500, sort: { time: { order: "desc" } }, included_categories: { incoming: ["transaction_share", "action"] }, query: [{ op: "and", clauses: [{ field: "metadata.transaction.merchant_id", op: "equal", value: config.merchant_id }, { field: "metadata.transaction.status", op: "in", value: ["settlement"] }, { field: "metadata.transaction.transaction_time", op: "gt", value: cutOffTimeISO }] }] };
         const balanceResp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(balancePayload) });
         
-        // Pancing auto-refresh frontend jika Gojek membalas 401
         if (balanceResp.status === 401) return c.json({ error: 'Session expired' }, 401);
         
         const balanceData: any = await balanceResp.json();
@@ -185,22 +162,52 @@ gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
             if (!processedBalanceIds.has(orderId)) { processedBalanceIds.add(orderId); realBalance += ((h.amount || metaTx.amount || 0) / 100); }
         });
 
-        const { from, to } = getDateRange('today');
-        const todayPayload = { from: 0, size: 300, query: [{ op: "and", clauses: [{ field: "metadata.transaction.merchant_id", op: "equal", value: config.merchant_id }, { field: "metadata.transaction.status", op: "in", value: ["settlement"] }, { field: "metadata.transaction.transaction_time", op: "gte", value: from }, { field: "metadata.transaction.transaction_time", op: "lte", value: to }] }] };
-        const todayResp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(todayPayload) });
+        // --- 2. LOGIKA REKAP DATA: HARI, MINGGU, BULAN ---
+        const { from: monthFrom, to: monthTo } = getDateRange('month');
+        const { from: weekFrom } = getDateRange('week');
+        const { from: todayFrom } = getDateRange('today');
+
+        // Tarik 1 bulan sekaligus untuk diolah (Maksimal 1000 item agar aman dari limit)
+        const statsPayload = { 
+            from: 0, size: 1000, 
+            included_categories: { incoming: ["transaction_share", "action"] }, 
+            query: [{ op: "and", clauses: [{ field: "metadata.transaction.merchant_id", op: "equal", value: config.merchant_id }, { field: "metadata.transaction.status", op: "in", value: ["settlement"] }, { field: "metadata.transaction.transaction_time", op: "gte", value: monthFrom }, { field: "metadata.transaction.transaction_time", op: "lte", value: monthTo }] }] 
+        };
+        const statsResp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(statsPayload) });
+        const statsData: any = await statsResp.json();
         
-        const todayData: any = await todayResp.json();
-        let todayCount = 0; const processedTodayIds = new Set();
-        (todayData.hits || []).forEach((h: any) => {
+        let todayCount = 0, todayAmount = 0;
+        let weekCount = 0, weekAmount = 0;
+        let monthCount = 0, monthAmount = 0;
+        const processedStatsIds = new Set();
+        
+        const tFrom = new Date(todayFrom).getTime();
+        const wFrom = new Date(weekFrom).getTime();
+
+        (statsData.hits || []).forEach((h: any) => {
             const metaTx = h.metadata?.transaction || {};
             const orderId = metaTx.order_id || h.reference_id;
-            if (!processedTodayIds.has(orderId)) { processedTodayIds.add(orderId); todayCount++; }
+            if (!processedStatsIds.has(orderId)) { 
+                processedStatsIds.add(orderId); 
+                const amt = ((h.amount || metaTx.amount || 0) / 100);
+                const txTime = new Date(h.time || metaTx.transaction_time).getTime();
+                
+                // Selalu masuk hitungan Bulan Ini
+                monthCount++; monthAmount += amt;
+                // Cek apakah masuk hitungan Minggu Ini
+                if (txTime >= wFrom) { weekCount++; weekAmount += amt; }
+                // Cek apakah masuk hitungan Hari Ini
+                if (txTime >= tFrom) { todayCount++; todayAmount += amt; }
+            }
         });
 
-        let apiCount = 0;
-        try { const stats: any = await db.prepare("SELECT COUNT(*) as count FROM transactions WHERE status = 'PAID'").first(); apiCount = stats.count || 0; } catch (e) {}
-
-        return c.json({ status: 'success', balance: realBalance, trx_count_gopay: todayCount, trx_count_api: apiCount });
+        return c.json({ 
+            status: 'success', 
+            balance: realBalance, 
+            today: { count: todayCount, amount: todayAmount },
+            week: { count: weekCount, amount: weekAmount },
+            month: { count: monthCount, amount: monthAmount }
+        });
     } catch (e: any) { return c.json({ error: e.message }, 500); }
 });
 
@@ -208,10 +215,9 @@ gobizRouter.get('/mutations', requireGoBizAuth, async (c) => {
     const config = c.get('config');
     const { from, to } = getDateRange(c.req.query('filter') || 'today');
     try {
-        const payload = { from: 0, size: 100, sort: { time: { order: "desc" } }, included_categories: { incoming: ["transaction_share", "action"] }, query: [{ op: "and", clauses: [{ field: "metadata.transaction.merchant_id", op: "equal", value: config.merchant_id }, { field: "metadata.transaction.transaction_time", op: "gte", value: from }, { field: "metadata.transaction.transaction_time", op: "lte", value: to }] }] };
+        const payload = { from: 0, size: 500, sort: { time: { order: "desc" } }, included_categories: { incoming: ["transaction_share", "action"] }, query: [{ op: "and", clauses: [{ field: "metadata.transaction.merchant_id", op: "equal", value: config.merchant_id }, { field: "metadata.transaction.transaction_time", op: "gte", value: from }, { field: "metadata.transaction.transaction_time", op: "lte", value: to }] }] };
         const resp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(payload) });
         
-        // Pancing auto-refresh frontend jika Gojek membalas 401
         if (resp.status === 401) return c.json({ error: 'Session expired' }, 401);
 
         const data: any = await resp.json();
@@ -221,7 +227,7 @@ gobizRouter.get('/mutations', requireGoBizAuth, async (c) => {
             const orderId = metaTx.order_id || hit.reference_id;
             if (!processedIds.has(orderId)) {
                 processedIds.add(orderId);
-                cleanData.push({ time: hit.time, amount: (hit.amount || metaTx.amount) / 100, status: metaTx.status || hit.status, order_id: orderId });
+                cleanData.push({ time: hit.time || metaTx.transaction_time, amount: (hit.amount || metaTx.amount) / 100, status: metaTx.status || hit.status, order_id: orderId });
             }
         });
         return c.json({ status: 'success', transactions: cleanData });
@@ -245,19 +251,4 @@ gobizRouter.get('/trx/list', async (c) => {
         const {results} = await c.env.DB.prepare('SELECT * FROM transactions ORDER BY created_at DESC LIMIT 50').all(); 
         return c.json({transactions:results}); 
     } catch(e) { return c.json({transactions:[]}); } 
-});
-
-gobizRouter.post('/update-webhook', requireGoBizAuth, async (c) => { 
-    const config = c.get('config'); 
-    const { webhook_url, email } = await c.req.json(); 
-    try { 
-        const payload = { "notification_settings": { "notification_url": webhook_url, "callback_url": webhook_url, "recurring_notification_url": webhook_url, "email_daily_report": email, "send_daily_report": true } }; 
-        const resp = await fetch("https://api.gobiz.co.id/v1/merchants/" + config.merchant_id, { method: 'PUT', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(payload) }); 
-        
-        // Pancing auto-refresh frontend jika Gojek membalas 401
-        if (resp.status === 401) return c.json({ error: 'Session expired' }, 401);
-
-        if(resp.status===200) return c.json({status:'success'}); 
-        return c.json({error:'Gojek Reject', details: await resp.text()}, resp.status); 
-    } catch(e:any) { return c.json({error:e.message}, 500); } 
 });
