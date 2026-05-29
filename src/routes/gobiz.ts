@@ -3,17 +3,21 @@ import { Bindings, Variables } from '../types';
 
 export const gobizRouter = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+// ==========================================
+// 1. HEADERS MUTLAK DARI SCRIPT PHP ANDA
+// (Anti-Block Cloudflare WAF)
+// ==========================================
 const getGojekHeaders = (token: string | null, deviceId: string) => ({
     'Host': 'api.gobiz.co.id',
     'Content-Type': 'application/json',
     'Accept': 'application/json, text/plain, */*',
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/121.0.0.0 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'x-appid': 'go-biz-web-dashboard',
     'x-client-id': 'go-biz-web-new',
-    'x-appversion': 'platform-v3.98.0',
+    'x-appversion': 'platform-v3.94.0-5aa26703', // Dari PHP Anda
     'x-deviceos': 'Web',
-    'x-phonemake': 'Google',
-    'x-phonemodel': 'Chrome',
+    'x-phonemake': 'Windows 10 64-bit',         // Dari PHP Anda
+    'x-phonemodel': 'Chrome 120.0.0.0 on Windows 10 64-bit', // Dari PHP Anda
     'x-platform': 'Web',
     'x-uniqueid': deviceId,
     'x-user-type': 'merchant',
@@ -57,7 +61,9 @@ function getDateRange(filter: string) {
     return { from: startWib.toISOString(), to: endWib.toISOString() };
 }
 
-// Murni menyontek struktur request JSON dari logs Anda
+// ======================================================================
+// BUILD QUERY TRANSAKSI SESUAI LOG ASLI GOJEK
+// ======================================================================
 function buildGojekQuery(merchantId: string, fromISO: string, toISO?: string) {
     const clauses: any[] = [
         { op: "not", clauses: [{ op: "or", clauses: [{ field: "metadata.source", op: "in", value: ["GOSAVE_ONLINE", "GoSave", "GODEALS_ONLINE"] }, { field: "metadata.gopay.source", op: "in", value: ["GOSAVE_ONLINE", "GoSave", "GODEALS_ONLINE"] }] }] },
@@ -66,8 +72,8 @@ function buildGojekQuery(merchantId: string, fromISO: string, toISO?: string) {
         { field: "metadata.transaction.transaction_time", op: "gte", value: fromISO },
         { field: "metadata.transaction.merchant_id", op: "equal", value: merchantId }
     ];
+    
     if (toISO) {
-        // Masukkan sebelum index terakhir agar rapi
         clauses.splice(clauses.length - 1, 0, { field: "metadata.transaction.transaction_time", op: "lte", value: toISO });
     }
     
@@ -78,20 +84,16 @@ function buildGojekQuery(merchantId: string, fromISO: string, toISO?: string) {
     };
 }
 
-async function fetchStats(config: any, fromISO: string, toISO: string, label: string) {
+async function fetchStats(config: any, fromISO: string, toISO: string) {
     const payload = buildGojekQuery(config.merchant_id, fromISO, toISO);
-    console.log(`[DEBUG - STATS ${label}] Query Payload:`, JSON.stringify(payload));
     try {
         const resp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(payload) });
-        if (!resp.ok) {
-            console.error(`[DEBUG - STATS ${label}] Fetch failed with status:`, resp.status);
-            return { count: 0, amount: 0 };
-        }
-        const data: any = await resp.json();
-        console.log(`[DEBUG - STATS ${label}] Hits found:`, data.hits?.length || 0);
+        if (!resp.ok) return { count: 0, amount: 0 };
         
+        const data: any = await resp.json();
         let count = 0, amount = 0;
         const processed = new Set();
+        
         (data.hits || []).forEach((h: any) => {
             const metaTx = h.metadata?.transaction || {};
             const orderId = metaTx.order_id || h.reference_id;
@@ -104,12 +106,12 @@ async function fetchStats(config: any, fromISO: string, toISO: string, label: st
             }
         });
         return { count, amount };
-    } catch(e) { 
-        console.error(`[DEBUG - STATS ${label}] Exception:`, e);
-        return { count: 0, amount: 0 }; 
-    }
+    } catch(e) { return { count: 0, amount: 0 }; }
 }
 
+// ==========================================
+// API LOGIN BERDASARKAN PHP SCRIPT
+// ==========================================
 gobizRouter.post('/login', async (c) => {
     try {
         const body = await c.req.json();
@@ -117,13 +119,19 @@ gobizRouter.post('/login', async (c) => {
         if (!body.email) return c.json({ error: "Email wajib diisi" }, 400);
 
         const resp = await fetch('https://api.gobiz.co.id/goid/login/request', {
-            method: 'POST', headers: getGojekHeaders(null, deviceId),
+            method: 'POST', 
+            headers: getGojekHeaders(null, deviceId),
             body: JSON.stringify({ client_id: "go-biz-web-new", email: body.email })
         });
         
         const text = await resp.text();
         let data: any;
-        try { data = JSON.parse(text); } catch(e) { return c.json({ error: "API Error" }, 400); }
+        try { 
+            data = JSON.parse(text); 
+        } catch(e) { 
+            console.error("[LOGIN ERROR] Cloudflare Block / Invalid JSON:", text);
+            return c.json({ error: "API Error - Diblokir oleh Gojek. Pastikan Headers sesuai.", details: text }, 400); 
+        }
 
         if (resp.ok && (data?.data?.otp_token || data?.otp_token)) {
             return c.json({ status: 'success', otp_token: data?.data?.otp_token || data?.otp_token, device_id: deviceId });
@@ -138,15 +146,25 @@ gobizRouter.post('/verify', async (c) => {
         const { otp, otp_token, device_id } = body;
         
         const tokenResp = await fetch('https://api.gobiz.co.id/goid/token', {
-            method: 'POST', headers: getGojekHeaders(null, device_id),
+            method: 'POST', 
+            headers: getGojekHeaders(null, device_id),
             body: JSON.stringify({ client_id: "go-biz-web-new", grant_type: "otp", data: { otp_token, otp: String(otp) } })
         });
         
-        const tokenData: any = await tokenResp.json();
+        const text = await tokenResp.text();
+        let tokenData: any;
+        try { 
+            tokenData = JSON.parse(text); 
+        } catch(e) { 
+            console.error("[VERIFY ERROR] Cloudflare Block / Invalid JSON:", text);
+            return c.json({ error: "API Error - Diblokir oleh Gojek", details: text }, 400); 
+        }
+
         if (!tokenData.access_token) return c.json({ error: 'OTP Salah' }, 401);
 
         const profileResp = await fetch('https://api.gobiz.co.id/v1/merchants/search?from=0&size=1', {
-            method: 'POST', headers: getGojekHeaders(tokenData.access_token, device_id),
+            method: 'POST', 
+            headers: getGojekHeaders(tokenData.access_token, device_id),
             body: JSON.stringify({ from: 0, size: 1 })
         });
         
@@ -168,7 +186,8 @@ gobizRouter.post('/refresh', async (c) => {
     if (!config || !config.refresh_token) return c.json({ error: 'No refresh token available' }, 401);
     try {
         const resp = await fetch('https://api.gobiz.co.id/goid/token', {
-            method: 'POST', headers: getGojekHeaders(null, config.device_id),
+            method: 'POST', 
+            headers: getGojekHeaders(null, config.device_id),
             body: JSON.stringify({ client_id: "go-biz-web-new", grant_type: "refresh_token", data: { refresh_token: config.refresh_token } })
         });
         const data: any = await resp.json();
@@ -190,58 +209,35 @@ gobizRouter.post('/logout', async (c) => {
 
 gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
     const config = c.get('config');
-    console.log("[DEBUG - BALANCE] Memulai proses fetch balance untuk merchant:", config.merchant_id);
-    
     try {
-        // --- 1. MENCARI TANGGAL PAYOUT TERAKHIR SEBAGAI TITIK NOL ---
-        console.log("[DEBUG - BALANCE] Memanggil API Payout Gojek...");
         const payoutResp = await fetch(`https://api.gobiz.co.id/v1/merchants/payouts?page=1&per=10`, { 
             method: 'GET', headers: getGojekHeaders(config.access_token, config.device_id) 
         });
         
-        let lastPayoutDateISO = "";
+        if (payoutResp.status === 401 || payoutResp.status === 403) return c.json({ error: 'Session expired' }, 401);
+        
+        const payoutData: any = await payoutResp.json();
+        let lastPayoutDateISO = ""; 
         let lastPayoutLabel = "Belum ada payout";
-
-        if (payoutResp.ok) {
-            const payoutData: any = await payoutResp.json();
-            if (payoutData.payouts && payoutData.payouts.length > 0) {
-                // Konversi tanggal created_at (format ISO dengan timezone) ke String ISO murni berakhiran 'Z' (UTC)
-                lastPayoutDateISO = new Date(payoutData.payouts[0].created_at).toISOString();
-                
-                // Format agar cantik dibaca frontend: "29 Mei, 17:13"
-                const dateObj = new Date(lastPayoutDateISO);
-                lastPayoutLabel = dateObj.toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' WIB';
-                
-                console.log(`[DEBUG - BALANCE] Payout ditemukan! Timestamp asli: ${payoutData.payouts[0].created_at}, ISO UTC: ${lastPayoutDateISO}`);
-            } else {
-                console.log("[DEBUG - BALANCE] Riwayat payout kosong.");
-            }
-        } else {
-            console.error("[DEBUG - BALANCE] Gagal fetch payout:", await payoutResp.text());
+        
+        if (payoutData.payouts && payoutData.payouts.length > 0) {
+            lastPayoutDateISO = new Date(payoutData.payouts[0].created_at).toISOString();
+            const dateObj = new Date(lastPayoutDateISO);
+            lastPayoutLabel = dateObj.toLocaleString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' WIB';
         }
 
-        // Fallback jika tidak ada riwayat payout sama sekali
         if (!lastPayoutDateISO) {
             const { from } = getDateRange('today');
             lastPayoutDateISO = from;
             lastPayoutLabel = "Hari ini 00:00";
-            console.log("[DEBUG - BALANCE] Menggunakan fallback:", lastPayoutDateISO);
         }
 
-        // --- 2. HITUNG SALDO SETELAH WAKTU PAYOUT TERSEBUT ---
         const balancePayload = buildGojekQuery(config.merchant_id, lastPayoutDateISO);
-        console.log("[DEBUG - BALANCE] Payload request jurnal:", JSON.stringify(balancePayload));
-        
         const balanceResp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(balancePayload) });
         
-        if (balanceResp.status === 401) {
-            console.log("[DEBUG - BALANCE] Session Expired (401)");
-            return c.json({ error: 'Session expired' }, 401);
-        }
+        if (balanceResp.status === 401 || balanceResp.status === 403) return c.json({ error: 'Session expired' }, 401);
         
         const balanceData: any = await balanceResp.json();
-        console.log(`[DEBUG - BALANCE] Ditemukan ${balanceData.hits?.length || 0} riwayat transaksi setelah payout.`);
-        
         let realBalance = 0; 
         const processedBalanceIds = new Set();
         
@@ -251,32 +247,29 @@ gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
             if (!processedBalanceIds.has(orderId)) { 
                 processedBalanceIds.add(orderId); 
                 if (metaTx.status === 'settlement') {
-                    const amount = (h.amount || metaTx.amount || 0) / 100;
-                    realBalance += amount; 
-                    console.log(`[DEBUG - BALANCE] + Menjumlahkan Rp ${amount} (Order: ${orderId})`);
+                    realBalance += ((h.amount || metaTx.amount || 0) / 100); 
                 }
             }
         });
 
-        console.log(`[DEBUG - BALANCE] Total Saldo Akhir: Rp ${realBalance}`);
-
-        // --- 3. REKAP DATA: HARI INI, MINGGU INI, BULAN INI ---
         const { from: tFrom, to: tTo } = getDateRange('today');
         const { from: wFrom, to: wTo } = getDateRange('week');
         const { from: mFrom, to: mTo } = getDateRange('month');
 
-        const today = await fetchStats(config, tFrom, tTo, 'TODAY');
-        const week = await fetchStats(config, wFrom, wTo, 'WEEK');
-        const month = await fetchStats(config, mFrom, mTo, 'MONTH');
+        const [today, week, month] = await Promise.all([
+            fetchStats(config, tFrom, tTo),
+            fetchStats(config, wFrom, wTo),
+            fetchStats(config, mFrom, mTo)
+        ]);
 
         return c.json({ 
             status: 'success', 
             balance: realBalance, 
-            last_payout_label: lastPayoutLabel, // Lempar string cantik ini ke UI HTML
+            last_payout_label: lastPayoutLabel,
             today, week, month
         });
     } catch (e: any) { 
-        console.error("[DEBUG - BALANCE] CATCH ERROR:", e);
+        console.error("[BALANCE ERROR]", e);
         return c.json({ error: e.message }, 500); 
     }
 });
@@ -288,7 +281,7 @@ gobizRouter.get('/mutations', requireGoBizAuth, async (c) => {
         const payload = buildGojekQuery(config.merchant_id, from, to);
         const resp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(payload) });
         
-        if (resp.status === 401) return c.json({ error: 'Session expired' }, 401);
+        if (resp.status === 401 || resp.status === 403) return c.json({ error: 'Session expired' }, 401);
 
         const data: any = await resp.json();
         const cleanData: any[] = []; const processedIds = new Set();
