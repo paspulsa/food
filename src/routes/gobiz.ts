@@ -137,9 +137,8 @@ gobizRouter.post('/logout', async (c) => {
 
 gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
     const config = c.get('config');
-    const db = c.env.DB;
     try {
-        // --- 1. TITIK NOL: JAM 22:00 WIB (Kemarin atau Hari Ini) ---
+        // --- 1. TITIK NOL: JAM 22:00 WIB ---
         const nowStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" });
         const jktDate = new Date(nowStr);
         if (jktDate.getHours() < 22) jktDate.setDate(jktDate.getDate() - 1);
@@ -150,7 +149,8 @@ gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
         const cutOffTimeISO = `${yyyy}-${mm}-${dd}T22:00:00+07:00`;
         const cutOffTimeMs = new Date(cutOffTimeISO).getTime();
 
-        // --- 2. HITUNG PEMASUKAN (SETTLEMENT) SETELAH TITIK NOL ---
+        // --- 2. HITUNG PEMASUKAN SETELAH TITIK NOL (SALDO MENGENDAP) ---
+        // Catatan: Disini included_categories tetap dipertahankan karena khusus menghitung "settlement bersih"
         const balancePayload = { 
             from: 0, size: 500, sort: { time: { order: "desc" } }, 
             included_categories: { incoming: ["transaction_share", "action"] }, 
@@ -172,38 +172,32 @@ gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
             }
         });
 
-        // --- 3. HITUNG PENGELUARAN (PAYOUT MANUAL) SETELAH TITIK NOL ---
+        // --- 3. HITUNG PENGELUARAN MANUAL SETELAH TITIK NOL ---
         let totalPengeluaran = 0;
         try {
-            // Tarik riwayat payout terbaru dari Gojek
             const payoutResp = await fetch(`https://api.gobiz.co.id/v1/merchants/payouts?page=1&per=10`, { 
                 method: 'GET', headers: getGojekHeaders(config.access_token, config.device_id) 
             });
             const payoutData: any = await payoutResp.json();
-            
             (payoutData.payouts || []).forEach((p: any) => {
                 const payoutTime = new Date(p.created_at).getTime();
-                // Jika pemilik warung melakukan payout manual SETELAH jam 10 malam terakhir
                 if (payoutTime > cutOffTimeMs) {
                     totalPengeluaran += (parseFloat(p.net_amount || p.amount || 0) / 100);
                 }
             });
-        } catch (err) {
-            console.error("Gagal menarik data pengeluaran manual", err);
-        }
+        } catch (err) {}
 
-        // --- 4. SALDO AKHIR = PEMASUKAN - PENGELUARAN ---
         let realBalance = totalPemasukan - totalPengeluaran;
-        if (realBalance < 0) realBalance = 0; // Mencegah tampilan minus jika ada delay sinkronisasi API
+        if (realBalance < 0) realBalance = 0; 
 
-        // --- 5. LOGIKA REKAP DATA: HARI, MINGGU, BULAN ---
+        // --- 4. REKAP DATA: HARI INI, MINGGU INI, BULAN INI ---
         const { from: monthFrom, to: monthTo } = getDateRange('month');
         const { from: weekFrom } = getDateRange('week');
         const { from: todayFrom } = getDateRange('today');
 
+        // PERBAIKAN: included_categories DIHAPUS agar semua transaksi masuk tanpa difilter aneh-aneh oleh API Gojek
         const statsPayload = { 
             from: 0, size: 1000, 
-            included_categories: { incoming: ["transaction_share", "action"] }, 
             query: [{ op: "and", clauses: [{ field: "metadata.transaction.merchant_id", op: "equal", value: config.merchant_id }, { field: "metadata.transaction.status", op: "in", value: ["settlement"] }, { field: "metadata.transaction.transaction_time", op: "gte", value: monthFrom }, { field: "metadata.transaction.transaction_time", op: "lte", value: monthTo }] }] 
         };
         const statsResp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(statsPayload) });
@@ -223,11 +217,16 @@ gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
             if (!processedStatsIds.has(orderId)) { 
                 processedStatsIds.add(orderId); 
                 const amt = ((h.amount || metaTx.amount || 0) / 100);
-                const txTime = new Date(h.time || metaTx.transaction_time).getTime();
+                // Gunakan metaTx.transaction_time karena formatnya selalu ISO mutlak
+                const txTimeStr = metaTx.transaction_time || h.time;
                 
-                monthCount++; monthAmount += amt;
-                if (txTime >= wFrom) { weekCount++; weekAmount += amt; }
-                if (txTime >= tFrom) { todayCount++; todayAmount += amt; }
+                if (txTimeStr) {
+                    const txTime = new Date(txTimeStr).getTime();
+                    
+                    monthCount++; monthAmount += amt;
+                    if (txTime >= wFrom) { weekCount++; weekAmount += amt; }
+                    if (txTime >= tFrom) { todayCount++; todayAmount += amt; }
+                }
             }
         });
 
@@ -245,7 +244,8 @@ gobizRouter.get('/mutations', requireGoBizAuth, async (c) => {
     const config = c.get('config');
     const { from, to } = getDateRange(c.req.query('filter') || 'today');
     try {
-        const payload = { from: 0, size: 500, sort: { time: { order: "desc" } }, included_categories: { incoming: ["transaction_share", "action"] }, query: [{ op: "and", clauses: [{ field: "metadata.transaction.merchant_id", op: "equal", value: config.merchant_id }, { field: "metadata.transaction.transaction_time", op: "gte", value: from }, { field: "metadata.transaction.transaction_time", op: "lte", value: to }] }] };
+        // PERBAIKAN: included_categories DIHAPUS dari mutations juga agar list tidak kosong
+        const payload = { from: 0, size: 500, sort: { time: { order: "desc" } }, query: [{ op: "and", clauses: [{ field: "metadata.transaction.merchant_id", op: "equal", value: config.merchant_id }, { field: "metadata.transaction.transaction_time", op: "gte", value: from }, { field: "metadata.transaction.transaction_time", op: "lte", value: to }] }] };
         const resp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(payload) });
         
         if (resp.status === 401) return c.json({ error: 'Session expired' }, 401);
