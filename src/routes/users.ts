@@ -76,7 +76,7 @@ userRouter.post('/', async (c) => {
       body.age || null, 
       gender, 
       body.address || null, 
-      finalRole, // Gunakan role yang sudah tervalidasi
+      finalRole, 
       body.phone || null, 
       avatar, 
       isActiveInt, 
@@ -87,7 +87,6 @@ userRouter.post('/', async (c) => {
 
     return c.json({ success: true, message: 'Pengguna berhasil ditambahkan', data: { id } }, 201);
   } catch (error: any) {
-    // Menangani error Unique Constraint Email
     if (error.message.includes('UNIQUE constraint failed')) {
       return c.json({ success: false, message: 'Email sudah terdaftar!' }, 400);
     }
@@ -95,7 +94,7 @@ userRouter.post('/', async (c) => {
   }
 });
 
-// UPDATE USER
+// UPDATE USER FULL DATA
 userRouter.put('/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
@@ -116,7 +115,7 @@ userRouter.put('/:id', async (c) => {
     body.age || null, 
     body.gender || 'UNKNOWN', 
     body.address || null, 
-    finalRole, // Gunakan role yang sudah tervalidasi
+    finalRole, 
     body.phone || null, 
     body.avatar || 'default-user.png', 
     isActiveInt, 
@@ -130,6 +129,29 @@ userRouter.put('/:id', async (c) => {
     return c.json({ success: false, message: 'Gagal memperbarui pengguna' }, 500);
   }
   return c.json({ success: true, message: 'Pengguna berhasil diperbarui' });
+});
+
+// ==========================================
+// ENDPOINT KHUSUS UBAH ROLE (DARI DASHBOARD ADMIN HTML)
+// ==========================================
+userRouter.put('/:id/role', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  
+  const roleInput = body.role ? body.role.toUpperCase() : '';
+  
+  if (!allowedRoles.includes(roleInput)) {
+      return c.json({ success: false, message: 'Role yang dikirim tidak valid.' }, 400);
+  }
+
+  const { success } = await c.env.DB.prepare(
+    `UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+  ).bind(roleInput, id).run();
+
+  if (!success) {
+    return c.json({ success: false, message: 'Gagal mengubah Role pengguna. ID tidak ditemukan.' }, 500);
+  }
+  return c.json({ success: true, message: `Akses berhasil diubah menjadi ${roleInput}` });
 });
 
 // DELETE USER
