@@ -3,33 +3,8 @@ import { createRoute } from 'honox/factory'
 export default createRoute(async (c) => {
   const db = c.env.DB;
   
-  const allowedRoles = ['ADMIN', 'CASHIER', 'KITCHEN', 'WAITER', 'USER'];
-
   // ==========================================
-  // 1. HANDLER POST: UBAH ROLE PENGGUNA
-  // ==========================================
-  if (c.req.method === 'POST') {
-    try {
-      const body = await c.req.json();
-      if (body.action === 'change_role') {
-        
-        // Validasi Role
-        if (!allowedRoles.includes(body.new_role)) {
-            return c.json({ success: false, message: 'Role tidak valid.' }, 400);
-        }
-
-        await db.prepare('UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-          .bind(body.new_role, body.user_id)
-          .run();
-        return c.json({ success: true, message: `Role berhasil diubah menjadi ${body.new_role}` });
-      }
-    } catch (e: any) {
-      return c.json({ success: false, message: 'Gagal mengubah role: ' + e.message }, 500);
-    }
-  }
-
-  // ==========================================
-  // 2. FETCH DATA USERS, POINTS, DAN ORDERS
+  // FETCH DATA USERS, POINTS, DAN ORDERS
   // ==========================================
   // Ambil semua pengguna
   const { results: users } = await db.prepare('SELECT * FROM users ORDER BY created_at DESC').all();
@@ -156,7 +131,6 @@ export default createRoute(async (c) => {
       <div id="user-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] hidden flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
         <div class="bg-gray-50 dark:bg-gray-900 w-full max-w-5xl rounded-3xl shadow-2xl overflow-hidden transform scale-95 transition-transform duration-300 flex flex-col max-h-[90vh]" id="user-modal-inner">
           
-          {/* Modal Header */}
           <div class="flex justify-between items-center p-5 bg-white dark:bg-darkpanel border-b border-gray-200 dark:border-darkborder shrink-0">
              <h3 class="font-black text-gray-800 dark:text-white text-lg flex items-center gap-2">
                <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 21h7a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v11m0 5l4.879-4.879m0 0a3 3 0 104.243-4.242 3 3 0 00-4.243 4.242z"></path></svg>
@@ -167,11 +141,9 @@ export default createRoute(async (c) => {
              </button>
           </div>
 
-          {/* Modal Body (Grid Layout) */}
           <div class="flex-1 overflow-y-auto p-5 hide-scrollbar">
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
-              {/* Kolom Kiri: Profil Pengguna */}
               <div class="lg:col-span-1 space-y-4">
                 <div class="bg-white dark:bg-darkpanel p-5 rounded-2xl border border-gray-200 dark:border-darkborder text-center shadow-sm relative overflow-hidden">
                   <div class="absolute top-0 left-0 w-full h-16 bg-gradient-to-r from-primary to-orange-400 opacity-20"></div>
@@ -207,7 +179,6 @@ export default createRoute(async (c) => {
                 </div>
               </div>
 
-              {/* Kolom Kanan: Riwayat Transaksi */}
               <div class="lg:col-span-2">
                 <div class="bg-white dark:bg-darkpanel rounded-2xl border border-gray-200 dark:border-darkborder shadow-sm h-full flex flex-col">
                   <div class="p-5 border-b border-gray-100 dark:border-darkborder flex justify-between items-center">
@@ -243,7 +214,6 @@ export default createRoute(async (c) => {
         const USERS_DATA = ${safeUsersJson};
         const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 
-        // Helper untuk warna badge role di Modal
         function getBadgeClassJS(role) {
           switch(role) {
             case 'ADMIN': return 'bg-purple-50 text-purple-600 border-purple-200 dark:bg-purple-900/30 dark:text-purple-400 dark:border-purple-500/30';
@@ -254,12 +224,10 @@ export default createRoute(async (c) => {
           }
         }
 
-        // Fungsi Render Modal Detail
         function showUserDetail(userId) {
           const user = USERS_DATA.find(u => u.id === userId);
           if (!user) return;
 
-          // Set Profil Kiri
           document.getElementById('m-avatar').src = user.avatar || \`https://ui-avatars.com/api/?name=\${user.name}&background=random\`;
           document.getElementById('m-name').innerText = user.name;
           document.getElementById('m-email').innerText = user.email;
@@ -274,7 +242,6 @@ export default createRoute(async (c) => {
           roleBadge.innerText = user.role;
           roleBadge.className = \`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold mt-1 border \${getBadgeClassJS(user.role)}\`;
 
-          // Render Tabel Riwayat Kanan
           const tbody = document.getElementById('m-history');
           if (user.orders.length === 0) {
              tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-10 text-center text-gray-400 italic">Belum pernah melakukan transaksi.</td></tr>';
@@ -303,7 +270,6 @@ export default createRoute(async (c) => {
              }).join('');
           }
 
-          // Tampilkan Modal
           const modal = document.getElementById('user-modal');
           const inner = document.getElementById('user-modal-inner');
           modal.classList.remove('hidden');
@@ -325,7 +291,7 @@ export default createRoute(async (c) => {
           }, 300);
         }
 
-        // Fungsi Ubah Role User (Select Dropdown via SweetAlert)
+        // FUNGSI UBAH ROLE YANG DIPERBAIKI (Tembak ke API Backend)
         async function changeRole(userId, currentRole, userName) {
           const allowedRoles = ['ADMIN', 'CASHIER', 'KITCHEN', 'WAITER', 'USER'];
           
@@ -354,12 +320,19 @@ export default createRoute(async (c) => {
                 didOpen: () => { Swal.showLoading(); }
             });
 
+            // AMBIL TOKEN DARI COOKIE
+            const token = document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1];
+            if (!token) return Swal.fire('Error', 'Sesi login kedaluwarsa.', 'error');
+
             try {
-              // Post ke route saat ini (self)
-              const res = await fetch('/admin/users', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'change_role', user_id: userId, new_role: newRole })
+              // TEMBAK KE ENDPOINT API BACKEND YANG BENAR
+              const res = await fetch('/api/v1/protected/admin/users/' + userId + '/role', {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token 
+                },
+                body: JSON.stringify({ role: newRole })
               });
               
               const data = await res.json();
