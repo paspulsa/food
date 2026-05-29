@@ -58,13 +58,13 @@ export default createRoute(async (c) => {
     `)
   ]);
 
-  // Cek Tabel Stok secara terpisah (menggunakan try-catch agar jika kolom 'stock' tidak ada, halaman tidak 500)
+  // Cek Tabel Stok secara terpisah (menggunakan try-catch agar tidak error 500 jika kolom stock kosong)
   let lowStockItems = [];
   try {
      const res = await c.env.DB.prepare('SELECT name, stock, image FROM menu_items WHERE stock <= 15 ORDER BY stock ASC LIMIT 5').all();
      lowStockItems = res.results;
   } catch (e) {
-     lowStockItems = []; // Fallback jika kolom stock tidak digunakan di schema
+     lowStockItems = []; 
   }
 
   // Pengolahan Variabel Metrik Kartu
@@ -77,10 +77,8 @@ export default createRoute(async (c) => {
   const formatter = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 });
 
   // Pengolahan Data untuk Chart.js (Grafik Penjualan)
-  // Di-reverse agar urutan tanggal dari yang terlama ke terbaru (kiri ke kanan)
   const rawSales = salesReq.results.reverse(); 
   const salesLabels = rawSales.map((s: any) => {
-      // Format tanggal ke 'DD MMM' (Misal: 24 Mei)
       const d = new Date(s.order_date);
       return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
   });
@@ -91,7 +89,6 @@ export default createRoute(async (c) => {
   const methodLabels = methods.map((m: any) => m.payment_method);
   const methodCounts = methods.map((m: any) => m.count);
 
-  // Kalkulasi Persentase Metode Pembayaran
   const totalMethodCount = methodCounts.reduce((a: number, b: number) => a + b, 0);
   const methodPercentages = methods.map((m: any) => ({
       label: m.payment_method,
@@ -120,10 +117,10 @@ export default createRoute(async (c) => {
       {/* 4 Kartu Metrik Utama */}
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Total Omset', value: formatter.format(totalGrossRev as number), desc: `Dari ${totalOrders} transaksi sukses`, icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6', trend: 'Data Asli DB' },
-          { label: 'Pemasukan Tunai/QRIS', value: formatter.format(totalNetRev as number), desc: 'Uang masuk real', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', trend: 'Data Asli DB' },
-          { label: 'Total Pesanan Masuk', value: totalOrders.toLocaleString('id-ID'), desc: 'Semua tipe order', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z', trend: 'Data Asli DB', isBlue: true },
-          { label: 'Total Pengguna', value: totalUsers.toLocaleString('id-ID'), desc: 'Member terdaftar', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z', trend: 'Data Asli DB', isPurple: true },
+          { label: 'Total Omset', value: formatter.format(totalGrossRev as number), desc: `Dari ${totalOrders} transaksi berhasil`, icon: 'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6', trend: 'Keseluruhan' },
+          { label: 'Pemasukan Bersih', value: formatter.format(totalNetRev as number), desc: 'Transaksi Lunas', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', trend: 'Keseluruhan' },
+          { label: 'Total Transaksi', value: totalOrders.toLocaleString('id-ID'), desc: 'Semua pesanan', icon: 'M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z', trend: 'Keseluruhan', isBlue: true },
+          { label: 'Total Pelanggan', value: totalUsers.toLocaleString('id-ID'), desc: 'Member terdaftar', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z', trend: 'Keseluruhan', isPurple: true },
         ].map((stat, i) => (
           <div class="bg-white dark:bg-darkpanel rounded-2xl p-5 border border-gray-100 dark:border-darkborder shadow-sm relative overflow-hidden group hover:border-primary/50 transition-colors">
             <div class="flex justify-between items-start mb-2">
@@ -227,7 +224,7 @@ export default createRoute(async (c) => {
           </div>
           <div class="space-y-4">
              {lowStockItems.length === 0 ? (
-                <p class="text-sm text-gray-400 italic">Semua stok aman atau fitur stok belum dikonfigurasi.</p>
+                <p class="text-sm text-gray-400 italic">Persediaan barang saat ini aman.</p>
              ) : lowStockItems.map((item: any) => (
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-3">
@@ -248,7 +245,7 @@ export default createRoute(async (c) => {
           <h3 class="font-bold text-gray-800 dark:text-white mb-4">Aktivitas Terbaru</h3>
           <div class="space-y-5">
             {recentOrders.results.length === 0 ? (
-              <p class="text-sm text-gray-400 italic">Belum ada data transaksi.</p>
+              <p class="text-sm text-gray-400 italic">Belum ada riwayat transaksi.</p>
             ) : recentOrders.results.map((order: any) => {
                // Warna Icon Berdasarkan Status
                let stColor = 'text-gray-500 bg-gray-100 dark:bg-gray-800';
@@ -279,7 +276,7 @@ export default createRoute(async (c) => {
       
       <div class="flex items-center justify-center sm:justify-start gap-2 mt-4 text-xs text-gray-400 pb-10">
          <span class="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></span>
-         Seluruh data diperbarui sinkron otomatis dari Database D1
+         Sistem berjalan dengan normal secara real-time
       </div>
 
       {/* Script Inisialisasi Chart.js menggunakan Data DB Asli */}
@@ -379,10 +376,8 @@ export default createRoute(async (c) => {
             }
           }
 
-          // Inisialisasi saat DOM siap
           document.addEventListener('DOMContentLoaded', initCharts);
           
-          // Re-inisialisasi ketika Dark Mode berubah
           const observer = new MutationObserver((mutations) => {
             mutations.forEach((mutation) => {
               if (mutation.attributeName === 'class') initCharts();
