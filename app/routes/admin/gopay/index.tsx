@@ -32,7 +32,7 @@ export default createRoute(async (c) => {
         <button onclick="switchTab('auth')" id="tab-auth" class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all bg-green-50 text-green-600 dark:bg-green-500/10 dark:text-green-400">🔑 Otentikasi</button>
         <button onclick="switchTab('dash')" id="tab-dash" class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800">📊 Dashboard</button>
         <button onclick="switchTab('qris')" id="tab-qris" class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800">⚡ QRIS Dinamis</button>
-        <button onclick="switchTab('webh')" id="tab-webh" class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800">🪝 API & Webhook</button>
+        <button onclick="switchTab('api')" id="tab-api" class="flex-1 py-2.5 px-4 rounded-xl text-sm font-bold transition-all text-gray-500 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800">⚙️ Master API</button>
       </div>
 
       {/* KONTEN TABS */}
@@ -143,27 +143,14 @@ export default createRoute(async (c) => {
           </div>
         </div>
 
-        {/* TAB 4: WEBHOOK & API (TANPA FORWARDING) */}
-        <div id="view-webh" class="tab-content hidden space-y-6">
-          <div class="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-900/30 p-4 rounded-xl">
+        {/* TAB 4: MASTER API */}
+        <div id="view-api" class="tab-content hidden space-y-6">
+          <div class="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-900/30 p-4 rounded-xl max-w-2xl mx-auto">
             <h3 class="font-bold text-blue-800 dark:text-blue-400 text-sm mb-2">🔑 Master API Key</h3>
             <div class="flex gap-2">
               <input id="api-key-display" class="w-full bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-900/50 p-2.5 rounded-lg text-sm font-mono text-gray-800 dark:text-gray-300 outline-none" readonly value={apiKey} onclick="this.select()" />
             </div>
-            <p class="text-[10px] text-blue-600 mt-1.5">Gunakan token ini sebagai "Bearer Token" jika Anda ingin menembak API /trx dari luar sistem.</p>
-          </div>
-
-          <div class="bg-gray-50 dark:bg-darkbg p-5 rounded-2xl border border-gray-100 dark:border-gray-700 max-w-xl">
-            <h3 class="font-bold text-gray-800 dark:text-white mb-4">Pengaturan Webhook GoBiz</h3>
-            <p class="text-xs text-gray-500 mb-3 leading-relaxed">Sistem akan secara otomatis menyetel URL Webhook Gojek Anda agar mengarah ke server ini.</p>
-            
-            <label class="block text-xs font-bold text-gray-500 mb-1">Target URL Server Ini (Otomatis)</label>
-            <input id="s_url" class="w-full px-3 py-2 bg-gray-200 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono mb-3 outline-none text-gray-500 cursor-not-allowed" readonly />
-            
-            <label class="block text-xs font-bold text-gray-500 mb-1">Email Laporan Harian (Opsional)</label>
-            <input id="s_mail" type="email" class="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg text-sm mb-5 outline-none focus:border-green-500 dark:text-white" placeholder="Contoh: laporan@domain.com" />
-            
-            <button onclick="updateGojekWebhook()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition shadow-md">Paksa Update Webhook GoBiz</button>
+            <p class="text-xs text-blue-600 mt-2">Gunakan token ini sebagai "Bearer Token" jika Anda ingin menembak API /trx dari luar sistem.</p>
           </div>
         </div>
 
@@ -176,9 +163,51 @@ export default createRoute(async (c) => {
           return document.cookie.split('; ').find(row => row.startsWith('admin_token='))?.split('=')[1] || '';
         }
 
+        // ==========================================
+        // PERUBAHAN: INTERCEPTOR 401 & AUTO-REFRESH
+        // ==========================================
         const api = {
-          get: (url) => fetch('/api/v1/protected/admin/gobiz' + url, { headers: { 'Authorization': 'Bearer ' + getAdminToken() } }).then(r => r.json()),
-          post: (url, body) => fetch('/api/v1/protected/admin/gobiz' + url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAdminToken() }, body: JSON.stringify(body) }).then(r => r.json())
+          async fetchWithRetry(url, options) {
+            const baseUrl = '/api/v1/protected/admin/gobiz';
+            let res = await fetch(baseUrl + url, options);
+            let data = await res.json().catch(() => ({}));
+
+            // Cek jika endpoint merespons dengan 401 atau Sesi Expired
+            if (res.status === 401 || data.error === 'Session expired') {
+              console.warn('Sesi terdeteksi mati, mencoba auto-refresh...');
+              
+              // Tembak endpoint refresh di backend Anda
+              // Catatan: Pastikan Anda punya route backend '/refresh' untuk menghandle refresh_token ke Gojek
+              const refreshRes = await fetch(baseUrl + '/refresh', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + getAdminToken() }
+              });
+
+              if (refreshRes.ok) {
+                console.log('Token Gojek berhasil diperbarui! Mengulangi request aslinya...');
+                // Ulangi request aslinya
+                res = await fetch(baseUrl + url, options);
+                data = await res.json().catch(() => ({}));
+              } else {
+                console.error('Refresh gagal. Membutuhkan login ulang.');
+                Swal.fire('Sesi Habis', 'Sesi login GoBiz Anda telah berakhir, silakan login ulang.', 'warning');
+                switchTab('auth'); // Otomatis tendang user ke tab login
+              }
+            }
+            return data;
+          },
+          get(url) {
+            return this.fetchWithRetry(url, { 
+              headers: { 'Authorization': 'Bearer ' + getAdminToken() } 
+            });
+          },
+          post(url, body) {
+            return this.fetchWithRetry(url, { 
+              method: 'POST', 
+              headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getAdminToken() }, 
+              body: JSON.stringify(body) 
+            });
+          }
         };
 
         // NAVIGASI TABS
@@ -193,9 +222,6 @@ export default createRoute(async (c) => {
           
           if(id === 'dash') loadDashboardData();
           if(id === 'qris') loadInjectorLog();
-          if(id === 'webh') {
-             document.getElementById('s_url').value = window.location.origin + '/webhook';
-          }
         }
 
         // ============================
@@ -341,19 +367,6 @@ export default createRoute(async (c) => {
               tbody.innerHTML = '<tr><td colspan="3" class="p-2 italic text-center">Belum ada transaksi di-generate.</td></tr>';
             }
           } catch(e) {}
-        }
-
-        // ============================
-        // LOGIKA WEBHOOK (TANPA FORWARDING)
-        // ============================
-        async function updateGojekWebhook() {
-          const payload = {
-            webhook_url: document.getElementById('s_url').value,
-            email: document.getElementById('s_mail').value || ''
-          };
-          const res = await api.post('/update-webhook', payload);
-          if(res.status === 'success') Swal.fire('Berhasil', 'URL Webhook GoBiz berhasil di-update!', 'success');
-          else Swal.fire('Gagal', res.error || 'Ditolak Gojek', 'error');
         }
 
         // INIT SAAT PERTAMA LOAD
