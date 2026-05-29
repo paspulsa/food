@@ -57,6 +57,48 @@ function getDateRange(filter: string) {
     return { from: startWib.toISOString(), to: endWib.toISOString() };
 }
 
+// ======================================================================
+// FUNGSI INI ADALAH KUNCI: 100% MENGIKUTI PAYLOAD ASLI DARI LOG ANDA
+// ======================================================================
+function buildGojekQuery(merchantId: string, fromISO: string, toISO?: string) {
+    const clauses: any[] = [
+        { op: "not", clauses: [{ op: "or", clauses: [{ field: "metadata.source", op: "in", value: ["GOSAVE_ONLINE", "GoSave", "GODEALS_ONLINE"] }, { field: "metadata.gopay.source", op: "in", value: ["GOSAVE_ONLINE", "GoSave", "GODEALS_ONLINE"] }] }] },
+        { field: "metadata.transaction.status", op: "in", value: ["settlement", "capture", "refund", "partial_refund"] },
+        { op: "or", clauses: [{ op: "or", clauses: [{ field: "metadata.transaction.payment_type", op: "in", value: ["qris", "gopay", "offline_credit_card", "offline_debit_card", "credit_card"] }] }] },
+        { field: "metadata.transaction.transaction_time", op: "gte", value: fromISO },
+        { field: "metadata.transaction.merchant_id", op: "equal", value: merchantId }
+    ];
+    if (toISO) clauses.push({ field: "metadata.transaction.transaction_time", op: "lte", value: toISO });
+    
+    return {
+        from: 0, size: 500, sort: { time: { order: "desc" } },
+        included_categories: { incoming: ["transaction_share", "action"] },
+        query: [{ op: "and", clauses }]
+    };
+}
+
+async function fetchStats(config: any, fromISO: string, toISO: string) {
+    const payload = buildGojekQuery(config.merchant_id, fromISO, toISO);
+    try {
+        const resp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(payload) });
+        if (!resp.ok) return { count: 0, amount: 0 };
+        const data: any = await resp.json();
+        
+        let count = 0, amount = 0;
+        const processed = new Set();
+        (data.hits || []).forEach((h: any) => {
+            const metaTx = h.metadata?.transaction || {};
+            const orderId = metaTx.order_id || h.reference_id;
+            if (!processed.has(orderId)) { 
+                processed.add(orderId); 
+                count++; 
+                amount += ((h.amount || metaTx.amount || 0) / 100); // Harus dibagi 100 (Cents ke Rupiah)
+            }
+        });
+        return { count, amount };
+    } catch(e) { return { count: 0, amount: 0 }; }
+}
+
 gobizRouter.post('/login', async (c) => {
     try {
         const body = await c.req.json();
@@ -138,83 +180,71 @@ gobizRouter.post('/logout', async (c) => {
 gobizRouter.get('/balance', requireGoBizAuth, async (c) => {
     const config = c.get('config');
     try {
-        // --- 1. MENGAMBIL TITIK 0 DARI HISTORI PAYOUT TERAKHIR (Persis seperti file referensi) ---
-        const payoutResp = await fetch(`https://api.gobiz.co.id/v1/merchants/payouts?page=1&per=1`, { 
-            method: 'GET', headers: getGojekHeaders(config.access_token, config.device_id) 
-        });
-        const payoutData: any = await payoutResp.json();
-        let lastPayoutDateISO = "2020-01-01T00:00:00.000Z";
-        if (payoutData.payouts?.length > 0) {
-            lastPayoutDateISO = new Date(payoutData.payouts[0].created_at).toISOString();
-        }
+        // --- 1. TITIK NOL: JAM 22:00 WIB (Sesuai kesepakatan) ---
+        const nowStr = new Date().toLocaleString("en-US", { timeZone: "Asia/Jakarta" });
+        const jktDate = new Date(nowStr);
+        if (jktDate.getHours() < 22) jktDate.setDate(jktDate.getDate() - 1);
+        
+        const yyyy = jktDate.getFullYear();
+        const mm = String(jktDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(jktDate.getDate()).padStart(2, '0');
+        const cutOffTimeISO = `${yyyy}-${mm}-${dd}T22:00:00+07:00`;
+        const cutOffTimeMs = new Date(cutOffTimeISO).getTime();
 
-        // --- 2. HITUNG SALDO REALTIME SETELAH TITIK 0 ---
-        const balancePayload = { 
-            from: 0, size: 500, sort: { time: { order: "desc" } }, 
-            included_categories: { incoming: ["transaction_share", "action"] }, 
-            query: [{ op: "and", clauses: [{ field: "metadata.transaction.merchant_id", op: "equal", value: config.merchant_id }, { field: "metadata.transaction.status", op: "in", value: ["settlement"] }, { field: "metadata.transaction.transaction_time", op: "gt", value: lastPayoutDateISO }] }] 
-        };
+        // --- 2. HITUNG PEMASUKAN SETELAH TITIK NOL ---
+        const balancePayload = buildGojekQuery(config.merchant_id, cutOffTimeISO);
         const balanceResp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(balancePayload) });
         
         if (balanceResp.status === 401) return c.json({ error: 'Session expired' }, 401);
         
         const balanceData: any = await balanceResp.json();
-        let realBalance = 0; 
+        let totalPemasukan = 0; 
         const processedBalanceIds = new Set();
         (balanceData.hits || []).forEach((h: any) => {
             const metaTx = h.metadata?.transaction || {};
             const orderId = metaTx.order_id || h.reference_id;
             if (!processedBalanceIds.has(orderId)) { 
                 processedBalanceIds.add(orderId); 
-                realBalance += ((h.amount || metaTx.amount || 0) / 100); 
+                totalPemasukan += ((h.amount || metaTx.amount || 0) / 100); 
             }
         });
 
-        // --- 3. REKAP STATISTIK HARI, MINGGU, BULAN ---
-        // (Sengaja TANPA included_categories persis seperti todayPayload di referensi, agar data terbaca utuh)
-        const { from: monthFrom, to: monthTo } = getDateRange('month');
-        const { from: weekFrom } = getDateRange('week');
-        const { from: todayFrom } = getDateRange('today');
-
-        const statsPayload = { 
-            from: 0, size: 500, 
-            query: [{ op: "and", clauses: [{ field: "metadata.transaction.merchant_id", op: "equal", value: config.merchant_id }, { field: "metadata.transaction.status", op: "in", value: ["settlement"] }, { field: "metadata.transaction.transaction_time", op: "gte", value: monthFrom }, { field: "metadata.transaction.transaction_time", op: "lte", value: monthTo }] }] 
-        };
-        const statsResp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(statsPayload) });
-        const statsData: any = await statsResp.json();
-        
-        let todayCount = 0, todayAmount = 0;
-        let weekCount = 0, weekAmount = 0;
-        let monthCount = 0, monthAmount = 0;
-        const processedStatsIds = new Set();
-        
-        const tFrom = new Date(todayFrom).getTime();
-        const wFrom = new Date(weekFrom).getTime();
-
-        (statsData.hits || []).forEach((h: any) => {
-            const metaTx = h.metadata?.transaction || {};
-            const orderId = metaTx.order_id || h.reference_id;
-            if (!processedStatsIds.has(orderId)) { 
-                processedStatsIds.add(orderId); 
-                const amt = ((h.amount || metaTx.amount || 0) / 100);
-                const txTimeStr = metaTx.transaction_time || h.time;
-                
-                if (txTimeStr) {
-                    const txTime = new Date(txTimeStr).getTime();
-                    
-                    monthCount++; monthAmount += amt;
-                    if (txTime >= wFrom) { weekCount++; weekAmount += amt; }
-                    if (txTime >= tFrom) { todayCount++; todayAmount += amt; }
+        // --- 3. HITUNG PENGELUARAN (PAYOUT MANUAL) SETELAH TITIK NOL ---
+        let totalPengeluaran = 0;
+        try {
+            const payoutResp = await fetch(`https://api.gobiz.co.id/v1/merchants/payouts?page=1&per=10`, { 
+                method: 'GET', headers: getGojekHeaders(config.access_token, config.device_id) 
+            });
+            const payoutData: any = await payoutResp.json();
+            
+            (payoutData.payouts || []).forEach((p: any) => {
+                const payoutTime = new Date(p.created_at).getTime();
+                // Buffer 5 Menit: Abaikan Auto-Payout sistem Gojek yang terjadi tepat 22:00
+                if (payoutTime > (cutOffTimeMs + 5 * 60000)) {
+                    totalPengeluaran += (parseFloat(p.net_amount || p.amount || 0) / 100);
                 }
-            }
-        });
+            });
+        } catch (err) {}
+
+        let realBalance = totalPemasukan - totalPengeluaran;
+        if (realBalance < 0) realBalance = 0; 
+
+        // --- 4. REKAP DATA: HARI INI, MINGGU INI, BULAN INI ---
+        const { from: tFrom, to: tTo } = getDateRange('today');
+        const { from: wFrom, to: wTo } = getDateRange('week');
+        const { from: mFrom, to: mTo } = getDateRange('month');
+
+        // Panggil helper yang sudah pakai payload resmi
+        const [today, week, month] = await Promise.all([
+            fetchStats(config, tFrom, tTo),
+            fetchStats(config, wFrom, wTo),
+            fetchStats(config, mFrom, mTo)
+        ]);
 
         return c.json({ 
             status: 'success', 
             balance: realBalance, 
-            today: { count: todayCount, amount: todayAmount },
-            week: { count: weekCount, amount: weekAmount },
-            month: { count: monthCount, amount: monthAmount }
+            today, week, month
         });
     } catch (e: any) { return c.json({ error: e.message }, 500); }
 });
@@ -223,11 +253,7 @@ gobizRouter.get('/mutations', requireGoBizAuth, async (c) => {
     const config = c.get('config');
     const { from, to } = getDateRange(c.req.query('filter') || 'today');
     try {
-        // TANPA included_categories agar status EXPIRE juga ikut ditarik (Sesuai dengan screenshot Anda)
-        const payload = { 
-            from: 0, size: 500, sort: { time: { order: "desc" } }, 
-            query: [{ op: "and", clauses: [{ field: "metadata.transaction.merchant_id", op: "equal", value: config.merchant_id }, { field: "metadata.transaction.transaction_time", op: "gte", value: from }, { field: "metadata.transaction.transaction_time", op: "lte", value: to }] }] 
-        };
+        const payload = buildGojekQuery(config.merchant_id, from, to);
         const resp = await fetch('https://api.gobiz.co.id/journals/search', { method: 'POST', headers: getGojekHeaders(config.access_token, config.device_id), body: JSON.stringify(payload) });
         
         if (resp.status === 401) return c.json({ error: 'Session expired' }, 401);
