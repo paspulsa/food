@@ -50,6 +50,13 @@ export default jsxRenderer(({ children, title }) => {
             }
           `
         }} />
+        <link rel="manifest" href="/manifest-admin.json" />
+      <meta name="theme-color" content="#ee4d2d" />
+      <script dangerouslySetInnerHTML={{ __html: `
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js'); });
+        }
+      `}} />
       </head>
       <body class="bg-gray-50 text-gray-900 dark:bg-darkbg dark:text-gray-100 antialiased transition-colors duration-300">
         <div class="flex h-screen overflow-hidden relative">
