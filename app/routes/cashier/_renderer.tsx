@@ -51,6 +51,14 @@ export default jsxRenderer(({ children, title }) => {
             }
           `
         }} />
+
+        <link rel="manifest" href="/manifest-cashier.json" />
+      <meta name="theme-color" content="#eab308" />
+      <script dangerouslySetInnerHTML={{ __html: `
+        if ('serviceWorker' in navigator) {
+          window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js'); });
+        }
+      `}} />
       </head>
       <body class="bg-gray-50 text-gray-900 dark:bg-darkbg dark:text-gray-100 antialiased transition-colors duration-300 overflow-hidden">
         <div class="flex h-screen w-full relative">
