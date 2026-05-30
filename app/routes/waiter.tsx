@@ -4,13 +4,14 @@ import { verify } from 'hono/jwt'
 
 export default createRoute(async (c) => {
   // ==========================================
-  // PROTEKSI HALAMAN (WAJIB LOGIN ADMIN)
+  // PROTEKSI HALAMAN (WAJIB LOGIN ADMIN/WAITER)
   // ==========================================
   const token = getCookie(c, 'admin_token');
   if (!token) return c.redirect('/login');
   try {
     const payload = await verify(token, c.env.JWT_SECRET, 'HS256');
-    if (payload.role !== 'ADMIN') return c.redirect('/login');
+    // PERBAIKAN: Berikan izin akses untuk WAITER (tidak hanya ADMIN)
+    if (payload.role !== 'ADMIN' && payload.role !== 'WAITER') return c.redirect('/login');
   } catch (e) { return c.redirect('/login'); }
 
   const db = c.env.DB;
@@ -44,8 +45,15 @@ export default createRoute(async (c) => {
           <h2 class="text-2xl font-bold text-gray-800">🏃‍♂️ Portal Waiter</h2>
           <p class="text-gray-500 text-sm mt-1">Antar makanan yang sudah selesai dimasak oleh dapur.</p>
         </div>
-        <div class="bg-green-50 text-green-600 px-4 py-2 rounded-xl font-bold border border-green-200">
-          Siap Antar: {orders.length}
+        <div class="flex items-center gap-3">
+          <div class="bg-green-50 text-green-600 px-4 py-2 rounded-xl font-bold border border-green-200">
+            Siap Antar: {orders.length}
+          </div>
+          {/* PERBAIKAN: Penambahan Tombol Keluar (Logout) untuk Waiter */}
+          <a href="/admin/logout" class="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-xl font-bold transition-colors border border-red-200 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+            Keluar
+          </a>
         </div>
       </div>
 
