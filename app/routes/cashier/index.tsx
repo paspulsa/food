@@ -63,6 +63,10 @@ export default createRoute(async (c) => {
                ))}
              </div>
            </div>
+           
+           <div class="w-full pt-6 border-t border-gray-100 dark:border-darkborder mt-4 col-span-full md:absolute md:bottom-8 md:left-8 md:right-8 md:w-auto md:border-none md:mt-0 md:pt-0 pointer-events-none hidden md:block">
+           </div>
+
         </div>
         
         {/* Tombol Utama Buka Shift */}
@@ -138,6 +142,7 @@ export default createRoute(async (c) => {
             <p class="text-sm font-bold text-primary mt-1 font-mono tracking-wider">ID SESI: {shiftId}</p>
          </div>
          <button onclick="closeShift()" class="bg-red-500 hover:bg-red-600 text-white font-bold px-6 py-3 rounded-xl shadow-lg shadow-red-500/20 active:scale-95 transition-all flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
             Tutup Sesi (End Shift)
          </button>
       </div>
@@ -146,6 +151,7 @@ export default createRoute(async (c) => {
          {/* KIRI: PEGAWAI AKTIF */}
          <div class="xl:col-span-1 bg-white dark:bg-darkpanel p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-darkborder self-start">
             <h3 class="text-lg font-black text-gray-800 dark:text-white mb-4 border-b border-gray-100 dark:border-gray-700 pb-2 flex items-center gap-2">
+               <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
                Pegawai On-Duty
             </h3>
             <div class="space-y-3">
@@ -166,6 +172,7 @@ export default createRoute(async (c) => {
          {/* KANAN: ORDER AKTIF */}
          <div class="xl:col-span-2 bg-white dark:bg-darkpanel p-6 rounded-2xl shadow-sm border border-gray-100 dark:border-darkborder">
             <h3 class="text-lg font-black text-gray-800 dark:text-white mb-4 border-b border-gray-100 dark:border-gray-700 pb-2 flex items-center gap-2">
+               <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                Kendali Transaksi & Dapur
             </h3>
             <div class="overflow-x-auto min-h-[300px]">
@@ -185,7 +192,8 @@ export default createRoute(async (c) => {
                      
                      // DEFINISI STATUS YANG BENAR
                      const payMethod = String(o.payment_method).toUpperCase();
-                     const isUnpaidCash = payMethod === 'CASH' && o.status === 'PENDING';
+                     // PERBAIKAN: isUnpaid berlaku untuk SEMUA metode selama statusnya masih PENDING
+                     const isUnpaid = o.status === 'PENDING';
                      const isProcessing = o.status === 'PROCESSING';
                      const isWaiting = o.kitchen_status === 'WAITING';
                      const isCooking = o.kitchen_status === 'COOKING' || o.kitchen_status === 'PREPARING';
@@ -204,8 +212,8 @@ export default createRoute(async (c) => {
                          </td>
                          <td class="px-4 py-4">
                             {/* BADGE STATUS UTAMA */}
-                            {isUnpaidCash ? (
-                               <span class="px-2 py-1 rounded text-[9px] font-black uppercase tracking-wider bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 shadow-sm border border-red-100 dark:border-red-900/50">MENUNGGU UANG (CASH)</span>
+                            {isUnpaid ? (
+                               <span class="px-2 py-1 rounded text-[9px] font-black uppercase tracking-wider bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 shadow-sm border border-red-100 dark:border-red-900/50">MENUNGGU PEMBAYARAN</span>
                             ) : isProcessing ? (
                                <span class="px-2 py-1 rounded text-[9px] font-black uppercase tracking-wider bg-yellow-50 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 shadow-sm border border-yellow-100 dark:border-yellow-900/50">DAPUR: {o.kitchen_status}</span>
                             ) : isDelivering ? (
@@ -217,37 +225,42 @@ export default createRoute(async (c) => {
                          <td class="px-4 py-4">
                             <div class="flex gap-1.5 justify-end items-center">
                                
-                               {/* TOMBOL TERIMA UANG (MENGUBAH PENDING -> PROCESSING) */}
-                               {isUnpaidCash && (
-                                  <button onclick={`verifyPayment('${o.id}')`} class="bg-green-500 hover:bg-green-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
-                                     Terima Uang
+                               {/* 1. TOMBOL KONFIRMASI BAYAR (BERLAKU UNTUK SEMUA METODE YANG MASIH PENDING) */}
+                               {isUnpaid && (
+                                  <button onclick={`verifyPayment('${o.id}', '${payMethod}')`} class="bg-green-500 hover:bg-green-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
+                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg> 
+                                     Konfirmasi Bayar
                                   </button>
                                )}
 
-                               {/* TOMBOL MASAK (JIKA DAPUR BELUM MENERIMA) */}
+                               {/* 2. TOMBOL MASAK (JIKA DAPUR BELUM MENERIMA) */}
                                {isProcessing && isWaiting && (
                                   <button onclick={`forceStatus('${o.id}', 'PROCESSING', 'COOKING')`} class="bg-yellow-500 hover:bg-yellow-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
+                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14v6m-3-3h6M6 10h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2zm10 0h2a2 2 0 002-2V6a2 2 0 00-2-2h-2a2 2 0 00-2 2v2a2 2 0 002 2zM6 20h2a2 2 0 002-2v-2a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2z"></path></svg>
                                      Masak
                                   </button>
                                )}
 
-                               {/* TOMBOL SIAP SAJI (JIKA DAPUR SEDANG MEMASAK) */}
+                               {/* 3. TOMBOL SIAP SAJI (JIKA DAPUR SEDANG MEMASAK) */}
                                {isProcessing && isCooking && (
                                   <button onclick={`forceStatus('${o.id}', 'PROCESSING', 'READY')`} class="bg-purple-500 hover:bg-purple-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
+                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 
                                      Siap Saji
                                   </button>
                                )}
 
-                               {/* TOMBOL ANTAR/SAJIKAN (JIKA DAPUR SUDAH READY) */}
+                               {/* 4. TOMBOL ANTAR/SAJIKAN (JIKA DAPUR SUDAH READY) */}
                                {isProcessing && isReady && (
                                   <button onclick={`forceStatus('${o.id}', 'DELIVERING', 'READY')`} class="bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
-                                     Antar / Sajikan
+                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg> 
+                                     Antar/Sajikan
                                   </button>
                                )}
 
-                               {/* TOMBOL SELESAIKAN (JIKA SUDAH DIANTAR) */}
+                               {/* 5. TOMBOL SELESAIKAN (JIKA SUDAH DIANTAR) */}
                                {isDelivering && (
                                   <button onclick={`forceStatus('${o.id}', 'COMPLETED', 'READY')`} class="bg-gray-800 dark:bg-gray-600 hover:bg-gray-900 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
+                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 
                                      Selesaikan
                                   </button>
                                )}
@@ -347,15 +360,23 @@ export default createRoute(async (c) => {
 
         // --- FUNGSI UPDATE STATUS PESANAN ---
         
-        function verifyPayment(orderId) {
+        function verifyPayment(orderId, payMethod) {
           const theme = getSwalTheme();
+          const isCash = payMethod === 'CASH';
+          
+          // Pesan dinamis berdasarkan metode
+          const titleTxt = isCash ? 'Uang Pas Diterima?' : 'Verifikasi Pembayaran QRIS?';
+          const textTxt = isCash ? 'Pesanan akan masuk ke antrean dapur.' : 'Pastikan saldo digital sudah masuk. Pesanan akan diteruskan ke dapur.';
+
           Swal.fire({
-            title: 'Terima Uang Pas?',
-            text: 'Pesanan akan masuk ke antrean dapur untuk dimasak.',
+            title: titleTxt,
+            text: textTxt,
             icon: 'question', showCancelButton: true, confirmButtonColor: '#22c55e', confirmButtonText: 'Ya, Lunas!',
             background: theme.background, color: theme.color
           }).then(async (result) => {
             if (result.isConfirmed) {
+              // Catatan: Endpoint pay-cash hanya mengganti status PENDING menjadi PROCESSING 
+              // sehingga aman digunakan juga untuk verifikasi manual QRIS
               const data = await apiRequest('/transactions/pay-cash', { order_id: orderId });
               if(data.success) {
                  window.location.reload();
