@@ -101,7 +101,6 @@ export default createRoute(async (c) => {
                   Swal.fire({ title: 'Memproses...', allowOutsideClick: false, background: document.documentElement.classList.contains('dark') ? '#1f2937' : '#fff', didOpen: () => { Swal.showLoading() } });
 
                   try {
-                      // TEMBAK KE API BACKEND
                       const res = await fetch('/api/v1/protected/ops/shift/start', { 
                         method: 'POST', 
                         headers: { 'Content-Type':'application/json', 'Authorization': 'Bearer ' + token }, 
@@ -110,7 +109,6 @@ export default createRoute(async (c) => {
                       const data = await res.json();
                       
                       if(data.success) {
-                         // Set cookie shift manual di frontend untuk memicu reload page ke Dashboard Shift
                          document.cookie = "current_shift_id=" + data.shift_id + "; path=/; max-age=86400;";
                          window.location.reload();
                       } else {
@@ -193,6 +191,8 @@ export default createRoute(async (c) => {
                   ) : activeOrders.map((o: any) => {
                      const isUnpaidCash = o.payment_method === 'CASH' && o.status === 'PENDING';
                      const isProcessing = o.status === 'PROCESSING';
+                     const isWaiting = o.kitchen_status === 'WAITING';
+                     const isPreparing = o.kitchen_status === 'PREPARING';
                      const isReady = o.kitchen_status === 'READY';
                      const isDelivering = o.status === 'DELIVERING';
 
@@ -220,6 +220,7 @@ export default createRoute(async (c) => {
                          </td>
                          <td class="px-4 py-4">
                             <div class="flex gap-1.5 justify-end items-center">
+                               
                                {/* 1. TOMBOL TERIMA UANG (CASH) */}
                                {isUnpaidCash && (
                                   <button onclick={`verifyPayment('${o.id}')`} class="bg-green-500 hover:bg-green-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
@@ -229,22 +230,30 @@ export default createRoute(async (c) => {
                                )}
 
                                {/* 2. TOMBOL KIRIM KE DAPUR (JIKA KITCHEN_STATUS MASIH WAITING) */}
-                               {isProcessing && o.kitchen_status === 'WAITING' && (
+                               {isProcessing && isWaiting && (
                                   <button onclick={`forceStatus('${o.id}', 'PROCESSING', 'PREPARING')`} class="bg-yellow-500 hover:bg-yellow-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
                                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14v6m-3-3h6M6 10h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2zm10 0h2a2 2 0 002-2V6a2 2 0 00-2-2h-2a2 2 0 00-2 2v2a2 2 0 002 2zM6 20h2a2 2 0 002-2v-2a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2z"></path></svg>
                                      Masak
                                   </button>
                                )}
 
-                               {/* 3. TOMBOL SAJIKAN/ANTAR (JIKA DAPUR SUDAH READY) */}
-                               {isProcessing && isReady && (
-                                  <button onclick={`forceStatus('${o.id}', 'DELIVERING', 'READY')`} class="bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
+                               {/* 3. TOMBOL SIAP SAJI (JIKA DAPUR SEDANG PREPARING) -> INI YANG TADI HILANG! */}
+                               {isProcessing && isPreparing && (
+                                  <button onclick={`forceStatus('${o.id}', 'PROCESSING', 'READY')`} class="bg-purple-500 hover:bg-purple-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
                                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 
-                                     Antar / Sajikan
+                                     Siap Saji
                                   </button>
                                )}
 
-                               {/* 4. TOMBOL SELESAI (JIKA SUDAH DIANTAR) */}
+                               {/* 4. TOMBOL SAJIKAN/ANTAR (JIKA DAPUR SUDAH READY) */}
+                               {isProcessing && isReady && (
+                                  <button onclick={`forceStatus('${o.id}', 'DELIVERING', 'READY')`} class="bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
+                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg> 
+                                     Antar/Sajikan
+                                  </button>
+                               )}
+
+                               {/* 5. TOMBOL SELESAI (JIKA SUDAH DIANTAR) */}
                                {isDelivering && (
                                   <button onclick={`forceStatus('${o.id}', 'COMPLETED', 'READY')`} class="bg-gray-800 dark:bg-gray-600 hover:bg-gray-900 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
                                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 
@@ -344,7 +353,7 @@ export default createRoute(async (c) => {
            });
         }
 
-        // --- FUNGSI UPDATE STATUS PESANAN BARU ---
+        // --- FUNGSI UPDATE STATUS PESANAN ---
         
         function verifyPayment(orderId) {
           const theme = getSwalTheme();
@@ -368,8 +377,10 @@ export default createRoute(async (c) => {
            let colorBtn = '#3b82f6';
            
            if(newStatus === 'CANCELLED') { titleTxt = 'Batalkan Pesanan?'; colorBtn = '#ef4444'; }
-           if(newStatus === 'COMPLETED') { titleTxt = 'Selesaikan Pesanan?'; colorBtn = '#1f2937'; }
-           if(newStatus === 'DELIVERING') { titleTxt = 'Antar Pesanan?'; colorBtn = '#3b82f6'; }
+           else if(newStatus === 'COMPLETED') { titleTxt = 'Selesaikan Pesanan?'; colorBtn = '#1f2937'; }
+           else if(newStatus === 'DELIVERING') { titleTxt = 'Antar / Sajikan Pesanan?'; colorBtn = '#3b82f6'; }
+           else if(newKitchen === 'PREPARING') { titleTxt = 'Teruskan ke Dapur (Masak)?'; colorBtn = '#eab308'; }
+           else if(newKitchen === 'READY' && newStatus === 'PROCESSING') { titleTxt = 'Tandai Siap Saji?'; colorBtn = '#a855f7'; }
 
            Swal.fire({
              title: titleTxt,
