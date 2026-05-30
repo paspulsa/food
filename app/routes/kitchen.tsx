@@ -4,13 +4,14 @@ import { verify } from 'hono/jwt'
 
 export default createRoute(async (c) => {
   // ==========================================
-  // PROTEKSI HALAMAN (WAJIB LOGIN ADMIN)
+  // PROTEKSI HALAMAN (WAJIB LOGIN ADMIN/KITCHEN)
   // ==========================================
   const token = getCookie(c, 'admin_token');
   if (!token) return c.redirect('/login');
   try {
     const payload = await verify(token, c.env.JWT_SECRET, 'HS256');
-    if (payload.role !== 'ADMIN') return c.redirect('/login');
+    // PERBAIKAN: Berikan izin akses untuk KITCHEN (tidak hanya ADMIN)
+    if (payload.role !== 'ADMIN' && payload.role !== 'KITCHEN') return c.redirect('/login');
   } catch (e) { return c.redirect('/login'); }
 
   const db = c.env.DB;
@@ -44,8 +45,15 @@ export default createRoute(async (c) => {
           <h2 class="text-3xl font-black text-white">👨‍🍳 Kitchen Display (KDS)</h2>
           <p class="text-gray-400 text-sm mt-1">Daftar pesanan lunas yang wajib segera disiapkan.</p>
         </div>
-        <div class="bg-red-500/20 text-red-500 border border-red-500/50 px-5 py-2.5 rounded-xl font-bold text-lg animate-pulse">
-          Antrean Masak: {orders.length}
+        <div class="flex items-center gap-4">
+          <div class="bg-red-500/20 text-red-500 border border-red-500/50 px-5 py-2.5 rounded-xl font-bold text-lg animate-pulse">
+            Antrean Masak: {orders.length}
+          </div>
+          {/* PERBAIKAN: Penambahan Tombol Keluar (Logout) untuk Dapur */}
+          <a href="/admin/logout" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2.5 rounded-xl font-bold transition-colors flex items-center gap-2 border border-gray-600">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+            Keluar
+          </a>
         </div>
       </div>
 
