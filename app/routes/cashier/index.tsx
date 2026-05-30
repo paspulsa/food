@@ -181,10 +181,10 @@ export default createRoute(async (c) => {
               <table class="w-full text-left whitespace-nowrap">
                 <thead>
                   <tr class="bg-gray-50 dark:bg-darkbg text-gray-500 dark:text-gray-400 text-[10px] uppercase tracking-wider">
-                    <th class="px-4 py-3 rounded-tl-lg font-bold">Pelanggan</th>
-                    <th class="px-4 py-3 font-bold">Tagihan</th>
-                    <th class="px-4 py-3 font-bold">Status Saat Ini</th>
-                    <th class="px-4 py-3 rounded-tr-lg font-bold text-right">Aksi Kasir</th>
+                    <th class="px-4 py-3 rounded-tl-lg font-bold">Pesanan</th>
+                    <th class="px-4 py-3 font-bold">Tagihan / Tipe</th>
+                    <th class="px-4 py-3 font-bold">Status Utama</th>
+                    <th class="px-4 py-3 rounded-tr-lg font-bold text-right">Aksi Terusan</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
@@ -192,28 +192,76 @@ export default createRoute(async (c) => {
                     <tr><td colspan="4" class="px-4 py-10 text-center text-gray-400 font-bold italic">Sistem bersih, tidak ada order aktif.</td></tr>
                   ) : activeOrders.map((o: any) => {
                      const isUnpaidCash = o.payment_method === 'CASH' && o.status === 'PENDING';
+                     const isProcessing = o.status === 'PROCESSING';
+                     const isReady = o.kitchen_status === 'READY';
+                     const isDelivering = o.status === 'DELIVERING';
+
                      return (
                        <tr class="hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors">
                          <td class="px-4 py-4">
                             <p class="font-black text-gray-800 dark:text-gray-200 text-xs">{o.customer_name}</p>
-                            <p class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 font-bold">{o.table_id || 'Bawa Pulang'}</p>
-                         </td>
-                         <td class="px-4 py-4 font-black text-primary text-xs">{formatter.format(o.total_price)}</td>
-                         <td class="px-4 py-4">
-                            <span class={`px-2 py-1 rounded text-[9px] font-black uppercase tracking-wider ${isUnpaidCash ? 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400' : 'bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400'}`}>
-                               {isUnpaidCash ? 'BELUM BAYAR (CASH)' : o.status}
-                            </span>
+                            <p class="text-[9px] text-gray-500 dark:text-gray-400 mt-0.5 font-bold font-mono">{o.id}</p>
                          </td>
                          <td class="px-4 py-4">
-                            <div class="flex gap-2 justify-end">
-                               {isUnpaidCash ? (
-                                  <button onclick={`verifyPayment('${o.id}')`} class="bg-green-500 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-sm hover:bg-green-600 flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg> Terima Uang</button>
-                               ) : (
-                                  <>
-                                    <button onclick={`forceStatus('${o.id}', 'COMPLETED', 'READY')`} class="bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[10px] font-bold px-3 py-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-500/20 transition-colors">Set Selesai</button>
-                                    <button onclick={`forceStatus('${o.id}', 'CANCELLED', 'WAITING')`} class="bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 text-[10px] font-bold px-3 py-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors">Batalkan</button>
-                                  </>
+                            <p class="font-black text-primary text-xs">{formatter.format(o.total_price)}</p>
+                            <p class="text-[9px] text-gray-500 dark:text-gray-400 font-bold mt-0.5">{o.table_id || 'Bawa Pulang'} • {o.payment_method}</p>
+                         </td>
+                         <td class="px-4 py-4">
+                            {/* BADGE STATUS UTAMA */}
+                            {isUnpaidCash ? (
+                               <span class="px-2 py-1 rounded text-[9px] font-black uppercase tracking-wider bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 shadow-sm border border-red-100 dark:border-red-900/50">MENUNGGU UANG (CASH)</span>
+                            ) : isProcessing ? (
+                               <span class="px-2 py-1 rounded text-[9px] font-black uppercase tracking-wider bg-yellow-50 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 shadow-sm border border-yellow-100 dark:border-yellow-900/50">DAPUR: {o.kitchen_status}</span>
+                            ) : isDelivering ? (
+                               <span class="px-2 py-1 rounded text-[9px] font-black uppercase tracking-wider bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 shadow-sm border border-blue-100 dark:border-blue-900/50">SEDANG DIANTAR</span>
+                            ) : (
+                               <span class="px-2 py-1 rounded text-[9px] font-black uppercase tracking-wider bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 shadow-sm border border-gray-200 dark:border-gray-600">{o.status}</span>
+                            )}
+                         </td>
+                         <td class="px-4 py-4">
+                            <div class="flex gap-1.5 justify-end items-center">
+                               {/* 1. TOMBOL TERIMA UANG (CASH) */}
+                               {isUnpaidCash && (
+                                  <button onclick={`verifyPayment('${o.id}')`} class="bg-green-500 hover:bg-green-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
+                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"></path></svg> 
+                                     Terima Uang
+                                  </button>
                                )}
+
+                               {/* 2. TOMBOL KIRIM KE DAPUR (JIKA KITCHEN_STATUS MASIH WAITING) */}
+                               {isProcessing && o.kitchen_status === 'WAITING' && (
+                                  <button onclick={`forceStatus('${o.id}', 'PROCESSING', 'PREPARING')`} class="bg-yellow-500 hover:bg-yellow-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
+                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14v6m-3-3h6M6 10h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2zm10 0h2a2 2 0 002-2V6a2 2 0 00-2-2h-2a2 2 0 00-2 2v2a2 2 0 002 2zM6 20h2a2 2 0 002-2v-2a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2z"></path></svg>
+                                     Masak
+                                  </button>
+                               )}
+
+                               {/* 3. TOMBOL SAJIKAN/ANTAR (JIKA DAPUR SUDAH READY) */}
+                               {isProcessing && isReady && (
+                                  <button onclick={`forceStatus('${o.id}', 'DELIVERING', 'READY')`} class="bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
+                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 
+                                     Antar / Sajikan
+                                  </button>
+                               )}
+
+                               {/* 4. TOMBOL SELESAI (JIKA SUDAH DIANTAR) */}
+                               {isDelivering && (
+                                  <button onclick={`forceStatus('${o.id}', 'COMPLETED', 'READY')`} class="bg-gray-800 dark:bg-gray-600 hover:bg-gray-900 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg shadow-md transition-colors flex items-center gap-1">
+                                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 
+                                     Selesaikan
+                                  </button>
+                               )}
+
+                               {/* OPSI LAINNYA (DROPDOWN) */}
+                               <div class="relative group">
+                                  <button class="bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 p-1.5 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">
+                                     <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg>
+                                  </button>
+                                  <div class="absolute right-0 mt-1 w-32 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 hidden group-hover:block z-50 overflow-hidden text-left">
+                                     <button onclick={`forceStatus('${o.id}', 'CANCELLED', 'WAITING')`} class="w-full text-left px-4 py-2.5 text-[10px] font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 border-b border-gray-50 dark:border-gray-700">Batalkan Pesanan</button>
+                                     <button onclick={`forceStatus('${o.id}', 'COMPLETED', 'READY')`} class="w-full text-left px-4 py-2.5 text-[10px] font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700">Selesaikan Paksa</button>
+                                  </div>
+                               </div>
                             </div>
                          </td>
                        </tr>
@@ -296,11 +344,14 @@ export default createRoute(async (c) => {
            });
         }
 
+        // --- FUNGSI UPDATE STATUS PESANAN BARU ---
+        
         function verifyPayment(orderId) {
           const theme = getSwalTheme();
           Swal.fire({
             title: 'Uang Pas Diterima?',
-            icon: 'question', showCancelButton: true, confirmButtonColor: '#22c55e', confirmButtonText: 'Ya, Lunas!',
+            text: 'Pesanan akan otomatis masuk ke antrean dapur.',
+            icon: 'question', showCancelButton: true, confirmButtonColor: '#22c55e', confirmButtonText: 'Ya, Uang Pas!',
             background: theme.background, color: theme.color
           }).then(async (result) => {
             if (result.isConfirmed) {
@@ -312,10 +363,17 @@ export default createRoute(async (c) => {
 
         function forceStatus(orderId, newStatus, newKitchen) {
            const theme = getSwalTheme();
+           
+           let titleTxt = 'Ubah Status?';
+           let colorBtn = '#3b82f6';
+           
+           if(newStatus === 'CANCELLED') { titleTxt = 'Batalkan Pesanan?'; colorBtn = '#ef4444'; }
+           if(newStatus === 'COMPLETED') { titleTxt = 'Selesaikan Pesanan?'; colorBtn = '#1f2937'; }
+           if(newStatus === 'DELIVERING') { titleTxt = 'Antar Pesanan?'; colorBtn = '#3b82f6'; }
+
            Swal.fire({
-             title: 'Ubah Status Paksa?',
-             text: 'Tindakan ini akan memotong alur dapur secara paksa.',
-             icon: 'warning', showCancelButton: true, confirmButtonColor: '#3b82f6', confirmButtonText: 'Ya, Ubah!',
+             title: titleTxt,
+             icon: 'warning', showCancelButton: true, confirmButtonColor: colorBtn, confirmButtonText: 'Ya, Lanjutkan',
              background: theme.background, color: theme.color
            }).then(async (result) => {
               if (result.isConfirmed) {
