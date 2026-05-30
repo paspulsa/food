@@ -1,0 +1,13 @@
+{
+  "name": "Terminal Kasir SPOS",
+  "short_name": "Kasir",
+  "start_url": "/cashier/",
+  "scope": "/cashier/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#eab308",
+  "icons": [
+    { "src": "/android-chrome-192x192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/android-chrome-512x512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
